@@ -7,13 +7,20 @@ Run verification in this order:
 1. Targeted Vitest tests for the changed behavior
 2. Typecheck (`tsc -b`)
 3. Lint (`npm run lint`) or the project quality gate
-4. Architecture drift checks
+4. Architecture drift checks and the Design-Pattern Compliance Gate
 5. Playwright check of the touched route when UI is affected, including a
    narrow mobile viewport when layout or interaction is responsive
 6. Manual spot check of the touched flow
 
 Code that passes tests but breaks layer direction is not done. UI-affecting
 changes never checked in a real rendered browser flow are not done.
+
+For a **refactor**, keep a running violation inventory and burn it to zero: seed
+it up front from the checks above across the change's dependency closure, append
+every violation you find while working, and re-run the gate after each batch
+until no item remains. A refactor is done only at zero open violations — never
+defer an in-scope violation to "next time". See
+[`refactor-inventory-and-completion.md`](refactor-inventory-and-completion.md).
 
 ## Architecture Drift Checklist
 
@@ -78,6 +85,43 @@ Confirm all of the following:
 - no `flatRoutes()`, framework-mode route files, or loader/action data APIs
   introduced (routing is declarative)
 
+## Design-Pattern Compliance Gate
+
+Run this pattern-by-pattern pass in addition to the drift checklist. Each line
+names a mandated pattern (see [`design-patterns.md`](design-patterns.md)) and the
+smell that **fails** the gate. Every failure is a violation that goes on the
+inventory and must be fixed before completion.
+
+- **Composition Root** — fails if the client, repositories, or auth service are
+  built anywhere but `src/main.tsx` / `infrastructure/config/`, or a use case or
+  module singleton constructs its own dependencies.
+- **Dependency Injection / Dependency Context** — fails on a service locator, a
+  `getRayfinClient()` reached across the app, or ports read from anything but the
+  injected Context / Hook arguments.
+- **Ports & Adapters** — fails if `client.data`, `RayfinClient`, or an auth SDK
+  is imported outside `src/infrastructure/`.
+- **Repository** — fails if data access happens outside a repository port, or a
+  repository returns raw Rayfin entity shapes instead of domain/view models.
+- **Strategy** — fails if the mock-vs-Fabric (or environment) choice is scattered
+  in `if` branches instead of selected once in a factory.
+- **Facade** — fails if components or use cases talk to the raw RayfinClient
+  surface instead of the infrastructure facade.
+- **Presenter / View Model** — fails if a component derives its own view model,
+  or business derivation lives in JSX instead of `selectors.ts` or a view-model
+  Hook.
+- **Reducer / State Machine** — fails if multi-field interaction state is mutated
+  ad hoc in a component instead of a reducer, or a lifecycle/status transition is
+  decided in the View from raw status literals.
+- **Factory** — fails if construction and wiring logic is inlined at call sites
+  instead of a factory in `infrastructure/config/`.
+- **Mapper / Anti-Corruption Layer** — fails if `Date`, ids, or Rayfin entity
+  shapes leak inward unconverted instead of being mapped at the adapter boundary.
+- **One component per file / no grab-bag** — fails on a `.tsx` that defines more
+  than one top-level component (including a many-primitive `ui.tsx`).
+- **No business decision in the View** — fails on status→action eligibility,
+  lifecycle transition legality, or metric→band/tone derived from raw literals
+  instead of a domain predicate or shared presentation helper.
+
 ## Useful Search Patterns
 
 Use `rg` for quick audits from the app root:
@@ -118,6 +162,9 @@ suspicious files quickly.
 
 Before considering the change complete, be able to state all of the following:
 
+- the violation inventory for the change's dependency closure is empty — no known
+  design-pattern or architecture-drift violation is left open, and no in-scope
+  violation was deferred to "next time"
 - the use-case layer owns the interaction logic
 - the view layer is mostly props plus rendering, styled with Tailwind
 - every screen you touched is finished to the full architecture: one component

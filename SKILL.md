@@ -61,6 +61,17 @@ and verification bar, it does not license skipping the work. Deferring genuine
 *platform* concerns (data model, `@role`/RLS, CLI, deployment) to the `rayfin`
 skill is scoping, not descoping — that is still expected.
 
+**Refactors run to zero.** When the job is to remove violations, keep a living
+violation inventory: seed it before editing by running the Design-Pattern
+Compliance Gate and drift checks across the change's dependency closure, append
+every violation you find while working, and loop — fixing in dependency order —
+until the inventory is empty and the gates are green. Never finish an app-code
+refactor with a known open violation, and never leave an imported shared module
+(e.g. a many-component `ui.tsx`) half-split. See
+[`references/refactor-inventory-and-completion.md`](references/refactor-inventory-and-completion.md)
+and the Design-Pattern Compliance Gate in
+[`references/verification-gates.md`](references/verification-gates.md).
+
 ## Overview
 
 Use this skill as the default architecture workflow for a **Rayfin SDK app**: a
@@ -296,8 +307,8 @@ reference that owns the full detail; load that reference for a matching change.
 - See
   [`references/project-bootstrap.md`](references/project-bootstrap.md),
   [`references/playwright-ui-verification.md`](references/playwright-ui-verification.md),
-  and
-  [`references/verification-gates.md`](references/verification-gates.md).
+  [`references/verification-gates.md`](references/verification-gates.md), and
+  [`references/refactor-inventory-and-completion.md`](references/refactor-inventory-and-completion.md).
 
 ## Implementation Workflow
 
@@ -442,6 +453,10 @@ reference that owns the full detail; load that reference for a matching change.
   infrastructure, `client.data` outside repositories, React/SDK inside domain).
 - For UI-affecting changes, run the touched route in Playwright and confirm the
   rendered result, interaction states, and responsive layout.
+- For a refactor, keep a violation inventory and burn it to zero: seed it from
+  the Design-Pattern Compliance Gate and drift checks across the dependency
+  closure, append every violation you find, and loop until it is empty. See
+  [`references/refactor-inventory-and-completion.md`](references/refactor-inventory-and-completion.md).
 - Fix architecture violations before considering the change done even if tests
   pass.
 
