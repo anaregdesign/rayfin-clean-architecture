@@ -47,6 +47,16 @@ never be violated.**
 The detailed rules in the rest of this document expand on these five. Whenever
 any guidance appears to conflict, these five always win.
 
+**Risk is a planning trigger, not an escape hatch.** When a required change is
+risky — a large or untested file, a broad rename, splitting a fat screen,
+removing shared module-global state — make an explicit plan (smaller batches,
+characterization tests where behavior could regress, and a verification pass)
+and complete it in the same change. Never silently descope, half-finish, or
+defer required app-code work because it "feels risky": risk raises the planning
+and verification bar, it does not license skipping the work. Deferring genuine
+*platform* concerns (data model, `@role`/RLS, CLI, deployment) to the `rayfin`
+skill is scoping, not descoping — that is still expected.
+
 ## Overview
 
 Use this skill as the default architecture workflow for a **Rayfin SDK app**: a
