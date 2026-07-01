@@ -41,6 +41,28 @@ general-purpose component library.
 - Pure utility helpers, hooks, types, and constants used by the component
   belong in sibling files, not appended to the component file.
 
+## The Shared Grab-Bag File Is Banned
+
+The most common one-component-per-file violation is a single "primitives"
+module that defines many components — a 500-line `ui.tsx` exporting `Button`,
+`Badge`, `Modal`, `Select`, `Input`, `QualityBadge`, and a dozen more. It is
+still one file with many top-level components, so it breaks the rule and blocks
+React Fast Refresh.
+
+- Give every shared primitive its own file under `src/components/shared/`
+  (`Button.tsx`, `Badge.tsx`, `Modal.tsx`, …), one component per file.
+- A non-component helper that lives near the primitives — a score→tone mapper, a
+  class-name joiner — goes in its own `.ts` module (e.g.
+  `shared/qualityTone.ts`), never appended to a component file. Mixing a plain
+  function into a `.tsx` component file also trips
+  `react-refresh/only-export-components`.
+- Reuse the shared primitive instead of re-implementing it per feature. When you
+  find a second copy of the same badge, table, or list scaffold, promote one to
+  `shared/` and delete the duplicate.
+- When you touch a legacy grab-bag file, split it in the same change; a thin
+  re-export `shared/index.ts` keeps importers stable while you move each
+  component into its own file.
+
 ## Filename And Export Conventions
 
 - Component files: `PascalCase.tsx` matching the exported component name.
@@ -49,8 +71,11 @@ general-purpose component library.
 - Prefer named exports for components. A `default` export is acceptable for the
   root `App` and page modules if the project's convention uses it, but do not
   default-export shared primitives.
-- Do not introduce barrel `index.ts` files inside `src/components/<feature>/`
-  by default. Import components directly from their file.
+- Do not introduce barrel `index.ts` files inside a feature folder
+  (`src/components/<feature>/`); import those components directly from their
+  file. The one exception is `src/components/shared/`, where a thin `index.ts`
+  that **only re-exports** the sibling one-component files is allowed for import
+  ergonomics — never a module that *defines* components.
 - Co-define the component's prop type in the component file as
   `type <ComponentName>Props = { ... }`. Move it to a sibling
   `<ComponentName>.types.ts` only when shared with another module in the same
@@ -72,6 +97,10 @@ Do not let a component file own:
 - reducer logic → same
 - data access → a repository port called from the use case; never `client.data`
   or `RayfinClient` in a component
+- business decisions → a status's allowed actions, a lifecycle transition's
+  legality, or a metric's band/tone belong in a domain predicate or a shared
+  presentation helper called from the component, never derived inline from
+  status or score literals
 
 ## Tailwind Styling Rules
 

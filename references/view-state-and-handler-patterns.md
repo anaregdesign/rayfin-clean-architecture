@@ -110,6 +110,53 @@ Components should not:
 - call ports or the Rayfin client directly
 - own reducer logic or async orchestration
 - own derived business view models
+- encode business decisions — which actions a record's status allows, whether a
+  lifecycle transition is legal, or how a metric maps to a band/tone. Call a
+  domain predicate (`canSubmitAccount(account)`) or read a ready flag from the
+  view-model; never re-derive the rule from status or score literals in JSX.
+
+## No Business Decisions In The View
+
+Even a render-only component must not *decide* business questions from raw
+fields. Two leaks slip through most often, even after a screen looks "thin":
+
+- **Status → action eligibility / lifecycle transitions.** A row that shows
+  "Submit" only for `draft`/`rejected` and "Archive" only for `approved` is
+  encoding the record's state machine in JSX. Put each rule in a domain
+  predicate and let the component ask it:
+
+  ```ts
+  // domain/models/account.ts — the state machine lives here
+  export function canSubmitAccount(a: Pick<Account, 'status'>): boolean {
+    return a.status === 'draft' || a.status === 'rejected';
+  }
+  ```
+  ```tsx
+  // components/account/AccountsTable.tsx — asks, never re-encodes
+  {canSubmitAccount(a) && <Button onClick={() => onSubmit(a)}>Submit</Button>}
+  ```
+
+- **Metric → band / tone / label thresholds.** `score >= 80 ? 'green' : …`
+  inlined in a component is a business banding rule, and it gets copy-pasted to
+  every place that shows the metric. Keep the thresholds in the domain and map
+  the band to a UI tone in one shared presentation helper that every view
+  reuses:
+
+  ```ts
+  // domain/quality.ts — thresholds are a domain rule
+  export function qualityBand(score: number): 'high' | 'medium' | 'low' { … }
+  ```
+  ```ts
+  // components/shared/qualityTone.ts — one band→tone map, reused everywhere
+  export function qualityTone(score: number): BadgeTone {
+    const band = qualityBand(score);
+    return band === 'high' ? 'green' : band === 'medium' ? 'amber' : 'red';
+  }
+  ```
+
+If a component needs a decision it imports a named domain predicate or a shared
+presentation helper, or receives a ready boolean/enum from the view-model. It
+never re-derives the rule from status or score literals.
 
 ## Component File And Styling Rules
 

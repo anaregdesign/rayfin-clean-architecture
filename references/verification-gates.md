@@ -48,6 +48,10 @@ Confirm all of the following:
 - no authorization rule that exists only in the UI with no reliance on `@role`
 - no Rayfin entity object or `Date` leaking into domain rules unchanged
 - no business logic buried in page containers or route elements
+- no business decision inlined in a component or page — a status's allowed
+  actions, a lifecycle transition's legality, or a metric's band/tone derived
+  from raw status/score literals instead of a domain predicate or a shared
+  presentation helper
 - no non-trivial async orchestration left inside presentational components
 - no new vague file names such as `helpers.ts`, `utils.ts`, or `common.ts`
 - no DTO or view-model shapes turned into classes where `type` plus functions
@@ -58,6 +62,11 @@ Confirm all of the following:
 - no `.tsx` file under `src/components/` exporting more than one top-level React
   component, and no file whose primary exported component name disagrees with
   the file name
+- no shared "grab-bag" module that defines several presentational primitives
+  (split into `src/components/shared/<Component>.tsx`, one per file; the only
+  allowed `shared/` barrel is a thin index that *only* re-exports)
+- no presentation policy (band/tone/label thresholds over a domain rule)
+  duplicated across components instead of a single shared helper
 - no `client.data`, `RayfinClient`, or auth SDK import inside a component or
   page
 - no CSS Modules or a second general-purpose component library introduced as a

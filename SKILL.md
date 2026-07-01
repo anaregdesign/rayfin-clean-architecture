@@ -38,7 +38,11 @@ never be violated.**
    is a reason to plan the split carefully, never a reason to defer it.
 5. **Never exceed a layer's responsibility, and defer platform concerns.**
    Components render, use cases orchestrate, domain holds business rules,
-   infrastructure talks to Rayfin and the browser. Data-model decorators
+   infrastructure talks to Rayfin and the browser. A component never *decides*
+   business questions — which actions a record's status allows, whether a
+   lifecycle transition is legal, or how a score maps to a band or tone; it
+   calls a domain predicate or reads a view-model flag instead of re-deriving
+   the rule from status or score literals. Data-model decorators
    (`@entity`, `@role`, RLS policies), auth methods, CLI, schema migration,
    and deployment belong to the Rayfin platform — keep them in `rayfin/` and
    defer to the bundled `rayfin` skill and its MCP tools instead of
@@ -355,6 +359,11 @@ reference that owns the full detail; load that reference for a matching change.
   validity, and derived previews live in a form Hook. Components and pages hold
   only props, passed handlers, and ephemeral UI state (open/selected/active
   tab).
+- **No business decisions in the View.** A component or page never derives a
+  status's allowed actions, a lifecycle transition, or a metric's band/tone from
+  raw literals; it calls a domain predicate (`canSubmitAccount`) or a shared
+  presentation helper (`qualityTone`), or reads a ready flag from the
+  view-model.
 - **Treat "one component per file" and "extract shared/feature components" as
   non-negotiable basics.** When you touch a fat screen, extract every inline
   top-level component into its own file under `src/components/<feature>/` (or
