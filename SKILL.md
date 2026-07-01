@@ -1,9 +1,9 @@
 ---
-name: react-router-clean-architecture
-description: "Own React Router app-code architecture, route boundaries, UI structure, and verification for Vite-based web apps. Use when the request mentions React Router routes, loaders or actions, component boundaries, use cases, domain models, server-side data access through repository ports, component-library UI, responsive UI, charts, Playwright UI verification, or app-structure refactoring."
+name: rayfin-clean-architecture
+description: "Own the app-code architecture, layer boundaries, design-pattern discipline, UI structure, and verification for a Rayfin SDK app (React 19 + Vite + Tailwind + declarative React Router, Fabric-authenticated, data through the Rayfin typed client over Data API Builder). Use when the request mentions Rayfin app structure, RayfinClient/client.data access, repository ports and adapters, composition root and dependency injection, client use cases, domain models, pages and components, Tailwind UI, Playwright UI verification, or app-structure refactoring. Defer data-model decorators, @role/RLS, auth methods, CLI, and deployment to the bundled `rayfin` skill and its MCP tools."
 ---
 
-# React Router App Architecture
+# Rayfin Clean Architecture
 
 ## Top Priority Rules (Non-Negotiable)
 
@@ -11,66 +11,65 @@ description: "Own React Router app-code architecture, route boundaries, UI struc
 take precedence over convenience, speed, or any other guidance here, and must
 never be violated.**
 
-1. **Route with FlatRoute.** Use FlatRoute
-   (`@react-router/fs-routes` `flatRoutes()`) as the routing convention: one
-   file per route module under `app/routes/`, with dots in the file name
-   mapping to URL slashes and `$segment` marking dynamic parameters.
-2. **One React component per file.** Each `.tsx` file exports exactly one
-   React component, and the file name (`PascalCase.tsx`) matches the exported
-   component name exactly.
-3. **One CSS Module per component.** Every component that needs custom CSS owns
-   exactly one sibling `<ComponentName>.module.css`, imported as
-   `import styles from "./<ComponentName>.module.css";` and applied through the
-   `styles` object. Never import non-module CSS inside a component.
-4. **Obey the canonical layout and dependency direction.** Place every file in
-   its canonical owner, and keep dependencies pointing strictly inward:
-   `routes`/`components` → client orchestration → `domain`; `server/usecase` →
-   `domain` + repository ports; `server/infrastructure` implements those ports.
-   Dependencies must never point outward.
-5. **Never exceed a layer's responsibility.** Keep every layer strictly within
-   its role — components render, use cases orchestrate, domain holds business
-   rules, infrastructure talks to the outside world. Never implement anything
-   that belongs to another layer.
+1. **Obey the canonical `src/` layout and inward dependency direction.** Place
+   every file in its canonical owner under `src/`, and keep dependencies
+   pointing strictly inward: `pages`/`components` → `lib/usecase` →
+   `lib/domain`; `lib/infrastructure` implements `lib/domain` ports.
+   Dependencies must never point outward, and `lib/domain` must never import
+   React, the Rayfin SDK, browser APIs, or the `rayfin/data` decorator models.
+2. **Reach the Rayfin SDK only through infrastructure ports.** Never call
+   `client.data.<Entity>`, `RayfinClient`, or an auth SDK from `pages`,
+   `components`, `lib/usecase`, or `lib/domain`. Data and auth flow through a
+   port defined in `lib/domain` and an adapter implemented in
+   `lib/infrastructure/`. This is the Repository + Ports-and-Adapters rule.
+3. **Assemble dependencies once in the composition root and inject them.**
+   `src/main.tsx` is the composition root: read config, build the RayfinClient,
+   pick the concrete adapters, and inject them through constructors, function
+   parameters, props, or a single React Context. No service locators, no
+   module-level mutable singletons carrying request/user state, no `new
+   SomeRepository()` inside `usecase` or `domain`.
+4. **One component per file; declarative routing; thin pages.** Each `.tsx`
+   exports exactly one React component whose name matches the file. Routing
+   uses `react-router-dom` in declarative mode (`<BrowserRouter>` /
+   `<Routes>` / `<Route>`) composed in `App.tsx`, with `src/pages/` holding
+   thin route containers that delegate to use cases.
+5. **Never exceed a layer's responsibility, and defer platform concerns.**
+   Components render, use cases orchestrate, domain holds business rules,
+   infrastructure talks to Rayfin and the browser. Data-model decorators
+   (`@entity`, `@role`, RLS policies), auth methods, CLI, schema migration,
+   and deployment belong to the Rayfin platform — keep them in `rayfin/` and
+   defer to the bundled `rayfin` skill and its MCP tools instead of
+   duplicating or contradicting them here.
 
 The detailed rules in the rest of this document expand on these five. Whenever
 any guidance appears to conflict, these five always win.
 
 ## Overview
 
-Use this skill as the default architecture workflow for a React Router SPA that
-uses Vite. Use it from initial bootstrap through ongoing implementation. Keep
-FlatRoute modules declarative, view files thin, data access server-only, and
-dependency direction explicit before writing code.
+Use this skill as the default architecture workflow for a **Rayfin SDK app**: a
+React 19 single-page app built with Vite, styled with Tailwind CSS, routed with
+`react-router-dom` in declarative mode, authenticated against Microsoft Fabric,
+and backed by the Rayfin typed client (`@microsoft/rayfin-client`) talking to a
+managed Data API Builder (DAB) backend. There is **no app-owned server layer**;
+the backend is the Rayfin/Fabric platform.
 
-This skill owns code structure, dependency direction, UI guardrails, and
-verification for the app codebase. Do not use it to define cloud provider
-choice, identity provisioning, secret-store topology, IaC layout, or deployment
-infrastructure; let a companion hosting skill add those concerns while
-preserving these rules.
+This skill owns code structure, dependency direction, **design-pattern
+discipline**, UI guardrails, and verification for the app codebase in `src/`.
+It does **not** own the Rayfin platform surface. Leave the data-model
+decorators, `@role`/row-level-security, auth methods, `rayfin.yml`, CLI
+(`rayfin up`, `rayfin login`), schema migration, and Fabric deployment to the
+bundled `rayfin` skill (`.agents/skills/rayfin/`) and its MCP tools
+(`search_docs`, `get_doc`, `discover_packages`). When platform questions
+appear, hand them off rather than answering them here.
 
-This skill is also persistence-agnostic. It defines where the data access layer
-lives, how it is shaped (repository ports in `domain`, repository
-implementations and ORM/SDK code in `server/infrastructure`), and how it must
-not leak across boundaries — but it does not pick an ORM, query builder, or
-database engine. Plug in the data stack that fits the project (Drizzle, Kysely,
-Prisma, TypeORM, raw `pg`, an HTTP backend, etc.) inside
-`app/lib/server/infrastructure/` and keep the rest of the rules unchanged.
+Because Rayfin ships a typed GraphQL-style client and enforces access with
+server-side `@role` policies, this skill's job is to keep that power **behind
+clean boundaries**: repository ports in `domain`, adapters in
+`infrastructure`, orchestration in `usecase`, and render-only `components`.
 
-For new or unstandardized UI work, prefer a single, consistent component
-library and a quiet, simple visual presentation. Keep primary
-labels and layouts concise, and move only supplemental, non-essential detail
-into tooltip or secondary-detail patterns.
-
-When data visualization is required, prefer the simplest accessible chart that
-matches the analytical task and keep chart interaction lightweight.
-
-For responsive behavior, prefer guidance that keeps the same feature usable on
-both desktop and mobile rather than treating `mobile-first` as a universal
-process requirement.
-
-If a companion hosting skill explicitly overrides runtime mode or config
-bootstrap, keep these architecture and boundary rules and let the companion
-override only the hosting-specific pieces.
+For UI work, use Tailwind utility classes as the styling system (the Rayfin
+template ships Tailwind v4), keep presentation quiet and simple, and keep
+required labels, validation, and critical status visible without hover.
 
 ## Canonical Layout
 
@@ -79,35 +78,38 @@ skill. Place every file in its canonical owner and organize directories by
 responsibility, not by team preference or historical drift.
 
 ```text
-app/
-  routes/
+src/
+  main.tsx                      # Composition Root: config → client → adapters → inject
+  App.tsx                       # Declarative router composition + auth gate (thin)
+  pages/                        # Route containers, one per screen (thin)
   components/
-    <feature>/
-    shared/
+    <feature>/                  # Feature-local presentational components
+    shared/                     # Feature-agnostic presentational primitives
   lib/
-    client/
-      usecase/
-        <feature>/
-          use-<feature>.ts
-          state.ts
-          reducer.ts
-          selectors.ts
-          handlers.ts
-      infrastructure/
-        api/
-        browser/
-    server/
-      usecase/
-      infrastructure/
-        config/
-        repositories/
-        gateways/
+    usecase/
+      <feature>/
+        use-<feature>.ts        # public Hook / controller entry point
+        state.ts reducer.ts selectors.ts handlers.ts types.ts
+      auth/
+        use-auth.ts
+        AuthContext.tsx         # view-facing auth context (service is injected)
     domain/
-      entities/
+      models/                   # business/view models (NOT the @entity classes)
       value-objects/
       policies/
-      services/
-      repositories/
+      services/                 # infrastructure-free domain orchestration (rare)
+      repositories/             # persistence ports (interfaces)
+      ports/                    # other outbound ports (auth, clock, notifier)
+    infrastructure/
+      rayfin/                   # RayfinClient facade + singleton + schema binding
+      data/                     # repository implementations wrapping client.data.<Entity>
+      auth/                     # auth-service implementations (mock vs Fabric)
+      browser/                  # localStorage, clipboard, media-query adapters
+      config/                   # import.meta.env readers + dependency factories
+
+rayfin/                         # PLATFORM — owned by the `rayfin` skill + MCP
+  data/                         # @entity decorator models (persistence schema)
+  rayfin.yml                    # Fabric service configuration
 ```
 
 The Placement Guide below maps each need to its location, and
@@ -118,26 +120,28 @@ covers the placement preflight, naming, and feature-boundary rules.
 
 1. Always read
    [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
-   before deciding where code should live.
+   before deciding where code should live, and
+   [`references/design-patterns.md`](references/design-patterns.md) before
+   wiring dependencies or data access.
 2. Run a placement preflight before implementing:
    - list every new file, moved file, and extracted file
    - assign the exact canonical target path for each file before writing code
-   - if a file does not fit the canonical layout, stop and revise the placement
-     plan before creating a new directory
+   - if a file does not fit the canonical layout, stop and revise the plan
+     before inventing a new directory
 3. Classify the requested change:
-   - route composition
+   - route/page composition
    - presentational UI
-   - client interaction flow
-   - server use case
-   - persistence or external integration
+   - client interaction flow (use case)
+   - data access (repository port + Rayfin adapter)
+   - auth flow
    - domain rule
-   - cross-boundary contract or utility
-4. Place code in its canonical owner from the Canonical Layout above. If a
-   file does not fit, revise the placement plan before creating a new
-   directory; the Placement Guide below maps each need to its location.
+   - cross-boundary contract or mapper
+   - platform concern (data model, `@role`, CLI, deploy) → **hand off to the
+     `rayfin` skill**
+4. Place code in its canonical owner from the Canonical Layout above.
 5. Read the narrowest matching reference for the task. The References section
-   at the end of this document lists every reference grouped by topic; load
-   only the one or two that match the change instead of the whole catalog.
+   at the end lists every reference grouped by topic; load only the one or two
+   that match the change.
 
 ## Core Rules
 
@@ -149,103 +153,120 @@ reference that owns the full detail; load that reference for a matching change.
 - Lock file placement before coding: name exact target paths first, then
   implement. If a file does not fit the Canonical Layout, revise the plan
   instead of inventing a convenience directory.
-- Keep dependency direction inward: `routes`/`components` → `client/usecase` →
-  `client/infrastructure` → `domain`; `server/usecase` → `domain` + repository
-  ports; `server/infrastructure` implements those ports; `domain` depends only
-  on `domain`.
-- Keep feature-local components in `app/components/<feature>/` and promote to
-  `app/components/shared/` only when feature-agnostic. Do not add generic
-  buckets (`app/features/`, `app/hooks/`, `app/utils/`, `app/types/`,
-  `app/store/`) or horizontal `state`/`reducers`/`handlers` directories.
+- Keep dependency direction inward: `pages`/`components` → `lib/usecase` →
+  `lib/domain`; `lib/infrastructure` implements `lib/domain` ports;
+  `lib/domain` depends only on `lib/domain`.
+- Keep feature-local components in `src/components/<feature>/` and promote to
+  `src/components/shared/` only when feature-agnostic. Do not add generic
+  buckets (`src/hooks/`, `src/services/`, `src/utils/`, `src/types/`,
+  `src/store/`) or horizontal `state`/`reducers`/`handlers` directories. The
+  Rayfin template's flat `services/` and `hooks/` map onto
+  `lib/infrastructure/` and `lib/usecase/` respectively.
 - See
-  [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md).
-
-### Boundaries, contracts, and dependency injection
-
-- Keep ORM/SDK/query-builder and direct database or network access inside
-  `app/lib/server/infrastructure/`; use cases and `domain` talk to repository
-  ports, not concrete clients.
-- Validate at the owning layer: transport shape in routes or API adapters,
-  application rules in use cases, business invariants in `domain`. Keep
-  transport `Request`/`Response` DTOs near their boundary and promote into
-  `domain` only when they are real business concepts.
-- Instantiate repositories and gateways in a composition root or factory, not
-  inside `domain` or use cases. Keep authorization, serialization, and side
-  effects explicit, and pass request context explicitly instead of through
-  module globals or singletons.
-- See
-  [`references/boundary-and-contract-rules.md`](references/boundary-and-contract-rules.md)
+  [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
   and
-  [`references/dependency-injection-lifetime-and-side-effects.md`](references/dependency-injection-lifetime-and-side-effects.md).
+  [`references/layer-responsibilities.md`](references/layer-responsibilities.md).
 
-### Routing and APIs
+### Design patterns, boundaries, and dependency injection
 
-- Use FlatRoute (`@react-router/fs-routes` `flatRoutes()`): one file per route
-  module under `app/routes/`, dots mapping to slashes, `$segment` for dynamic
-  params. Deviate only when the project, a generator, or a framework
-  integration requires it.
-- Shape URLs as resources (`/items`, `/items/$itemId`,
-  `/items/$itemId/comments`) and reserve rare verb paths for genuine non-CRUD
-  operations. Keep route modules limited to HTTP, loader/action wiring, and
-  top-level composition.
+- Model outbound needs as **ports** in `lib/domain` (repository ports,
+  auth/clock/notifier ports) and their **adapters** in `lib/infrastructure`.
+  Use cases and domain depend on ports, never on `RayfinClient` or
+  `client.data`.
+- Use the **Repository** pattern for all data access: the port lives in
+  `lib/domain/repositories/`, and the Rayfin-backed implementation in
+  `lib/infrastructure/data/` uses the typed `client.data.<Entity>` internally.
+- Use **Strategy** to swap implementations by environment (e.g. an in-memory
+  repository or mock auth service for local dev vs the Rayfin-backed ones),
+  and choose the strategy in the composition root.
+- Assemble everything in the **Composition Root** (`src/main.tsx`) with
+  explicit **Factory** functions in `lib/infrastructure/config/`. Inject by
+  constructor, parameter, props, or one Context. Never use a service locator
+  or a stateful module singleton.
+- Keep authorization intent explicit in use cases/policies even though Rayfin
+  enforces `@role` server-side; treat Fabric session/claims as request context
+  passed explicitly.
 - See
-  [`references/flat-route-rest-api-guidelines.md`](references/flat-route-rest-api-guidelines.md).
+  [`references/design-patterns.md`](references/design-patterns.md),
+  [`references/dependency-injection-lifetime-and-side-effects.md`](references/dependency-injection-lifetime-and-side-effects.md),
+  and
+  [`references/boundary-and-contract-rules.md`](references/boundary-and-contract-rules.md).
+
+### Rayfin data access
+
+- Never call `client.data.<Entity>` or hand-write GraphQL/`fetch` outside
+  `lib/infrastructure/`. Go through a repository port.
+- Return domain/view models from repositories. Map the Rayfin entity/query
+  shape to the domain shape only when they genuinely diverge; for simple
+  screens the query DTO may be the view model directly — do not over-map.
+- Keep query composition (`.select().where().orderBy().execute()`,
+  `.findById()`, `.create()`, `.update()`, `.delete()`) inside the adapter, and
+  keep `user_id`/`claims.sub` scoping and Fabric session reads at that
+  boundary.
+- See
+  [`references/rayfin-data-access.md`](references/rayfin-data-access.md).
+
+### Routing, pages, and navigation
+
+- Use `react-router-dom` in declarative mode: compose `<Routes>` in `App.tsx`,
+  keep an `AuthGuard` at the route boundary, and put one thin container per
+  screen in `src/pages/`. Read params with `useParams`, navigate with
+  `useNavigate`/`<Navigate>`.
+- Shape URLs as resources (`/items`, `/items/:itemId`,
+  `/items/:itemId/comments`) and keep pages limited to composition and
+  delegation to use cases. There are no loaders/actions/framework-mode routes
+  here.
+- See
+  [`references/routing-and-navigation.md`](references/routing-and-navigation.md).
 
 ### Client state and components
 
 - Keep async state, mutation handlers, and derived view models in
-  `app/lib/client/usecase/`, with `state`/`reducer`/`selectors`/`handlers`
-  colocated in the owning feature directory. Keep components presentational
-  with only ephemeral UI state.
-- Default client data access to `api` adapters plus DTO mapping in the owning
-  use case; add a client-side repository only for multi-source or local-first
-  needs.
+  `src/lib/usecase/`, with `state`/`reducer`/`selectors`/`handlers` colocated
+  in the owning feature directory. Keep components presentational with only
+  ephemeral UI state.
+- Expose data to the view through use-case Hooks that call repository ports;
+  never let a component call a repository or the Rayfin client directly.
 - See
   [`references/view-state-and-handler-patterns.md`](references/view-state-and-handler-patterns.md).
 
 ### Components, styling, and UI presentation
 
 - One React component per `.tsx` file with the file name matching the exported
-  component; default component-owned styling to a sibling
-  `<ComponentName>.module.css` and never import non-module CSS inside a
-  component. Avoid inline `style` for static styling, and reserve global CSS
-  under `app/styles/` for resets, fonts, baseline, and theme-host wiring.
-- Prefer one component library for new UI: compose its documented primitives
-  before custom controls, use its design tokens and styling solution for
-  theme-aware visuals, and do not mix two general-purpose libraries. Keep UI
-  visually simple and keep required labels, validation, and critical status
-  visible without hover.
-- Choose the simplest accessible chart for the task, and build responsive UI
-  that stays capable on desktop and mobile with content-driven breakpoints,
-  narrow-screen reflow, and WCAG 2.2 touch targets.
+  component. Style with **Tailwind** utility classes; do not introduce CSS
+  Modules or a second general-purpose component library as a requirement. Keep
+  repeated utility clusters DRY by extracting a component or a small
+  `@apply`-based class, not by copy-paste.
+- Keep UI visually simple and keep required labels, validation, and critical
+  status visible without hover. Choose the simplest accessible chart for the
+  task, and build responsive UI that stays capable on desktop and mobile.
 - See
-  [`references/component-file-and-css-module-rules.md`](references/component-file-and-css-module-rules.md)
+  [`references/component-and-styling-rules.md`](references/component-and-styling-rules.md)
   and
   [`references/ui-presentation-guidance.md`](references/ui-presentation-guidance.md).
 
 ### Domain modeling and types
 
 - Use `class` only when identity, invariants, or lifecycle matter; prefer
-  composition over inheritance and keep DTO or transport shapes as `type` plus
+  composition over inheritance and keep DTO/view shapes as `type` plus
   functions. Use `interface` for stable object ports, `type` for DTOs, unions,
   and view models.
-- Treat untrusted data as `unknown` at the boundary and narrow it immediately.
-  Keep one concept under one owner, build behavior around `domain` without
-  forcing UI, DTO, or infrastructure concerns into it, and keep constants in
-  the narrowest owner.
+- Treat untrusted data as `unknown` at the boundary and narrow it immediately —
+  including Rayfin query results promoted into domain shapes and
+  `import.meta.env` values. Keep the `rayfin/data` decorator entities out of
+  `lib/domain`; domain models are separate business/view types.
 - See
   [`references/domain-modeling-and-type-rules.md`](references/domain-modeling-and-type-rules.md).
 
 ### Bootstrap and verification
 
-- Prefer React Router's official Vite-powered bootstrap; pick the data stack
-  once and confine its imports to `app/lib/server/infrastructure/`. This skill
-  does not choose the ORM, query builder, or database engine, and does not own
-  cloud provisioning, identity, secrets, IaC, or release infrastructure — leave
-  those to a companion hosting skill.
+- Bootstrap new projects with `npm create @microsoft/rayfin@latest`; it
+  generates the correct `tsconfig` (TC39 decorators, `ESNext.Decorators`),
+  Tailwind + Vite wiring, `rayfin/` schema scaffold, and `.mcp.json`. Do not
+  retrofit a plain Vite template or enable `experimentalDecorators`.
 - For UI-affecting changes, verify the rendered result with Playwright
   (accessible locators, web-first assertions, relevant routes and viewports)
-  rather than code inspection alone.
+  rather than code inspection alone. Run typecheck, lint, and Vitest.
 - See
   [`references/project-bootstrap.md`](references/project-bootstrap.md),
   [`references/playwright-ui-verification.md`](references/playwright-ui-verification.md),
@@ -261,173 +282,122 @@ reference that owns the full detail; load that reference for a matching change.
   first.
 - Write the exact target paths for every created or moved file before touching
   code.
-- Confirm that each target path matches one canonical owner:
-  - route HTTP composition: `app/routes/`
-  - feature-local presentational UI: `app/components/<feature>/`
-  - shared presentational UI: `app/components/shared/`
-  - client orchestration and state: `app/lib/client/usecase/<feature>/`
-  - client adapters: `app/lib/client/infrastructure/`
-  - server orchestration: `app/lib/server/usecase/`
-  - server integrations, ORM/SDK clients, and persistence:
-    `app/lib/server/infrastructure/`
-  - domain concepts and ports: `app/lib/domain/`
+- Confirm each target path matches one canonical owner:
+  - route composition and page containers: `src/App.tsx`, `src/pages/`
+  - feature-local presentational UI: `src/components/<feature>/`
+  - shared presentational UI: `src/components/shared/`
+  - client orchestration and state: `src/lib/usecase/<feature>/`
+  - domain concepts and ports: `src/lib/domain/`
+  - Rayfin/browser adapters and repository implementations:
+    `src/lib/infrastructure/`
+  - platform data model / config: `rayfin/` (**defer to the `rayfin` skill**)
 - If any planned file lacks a clear owner, fix the placement plan before
   implementing.
 
 ### 0. Bootstrap new projects correctly
 
-- When starting from scratch, follow
-  [`references/project-bootstrap.md`](references/project-bootstrap.md) before
-  writing features.
-- Prefer `create-react-router` for this skill's architecture because it
-  already aligns with Vite, route modules, and SPA mode.
-- Add `@react-router/fs-routes` and SPA configuration before layering domain or
-  use-case code. Use FlatRoute (`flatRoutes()`) as the routing convention from
-  the first route file so URL shape, dynamic segments, and index modules stay
-  consistent across the app.
-- Add the chosen component library early for new UI work so components,
-  theming, and accessibility patterns stay consistent from the first screen.
-- Pick the data stack (ORM, query builder, or remote backend client) once,
-  document it in the project, and keep its imports confined to
-  `app/lib/server/infrastructure/`. This skill is intentionally silent on
-  which one.
-- Before substantial feature work begins, prefer installing the baseline
-  dependencies the project already knows it will need so architecture work does
-  not drift around missing packages mid-implementation.
-- When hosting, identity, or deployment requirements appear, keep this skill on
-  code-level architecture and hand the platform-specific decisions to the
-  companion hosting skill.
+- Follow
+  [`references/project-bootstrap.md`](references/project-bootstrap.md): scaffold
+  with `npm create @microsoft/rayfin@latest`, then grow the `src/lib/` layers
+  as the first feature needs them.
+- Before writing entities or queries, consult the `rayfin` skill / MCP
+  `search_docs('known limitations')` for platform constraints (text length
+  caps, scalar types, FK naming, MSSQL gotchas).
 
 ### 1. Model the change around a use case
 
 - Name the user intent first.
-- Put invariants in `domain/entities` or `domain/value-objects`, and put
-  cross-entity rules in `domain/policies` or `domain/services` when they do not
-  naturally belong to one model.
-- Put behavior where the state lives: entity behavior on entities, value
-  normalization on value objects, cross-entity rules on policies, and
-  orchestration on services or use cases.
-- Keep literals local until they become stable, named concepts. Extract only
-  when the name improves readability or the value is reused inside one clear
-  boundary.
-- Treat untrusted data as `unknown` first, then narrow it at the boundary with
-  a parser, schema, or type guard before promoting it to a DTO or domain shape.
-- When two modules appear to serve the same role, first ask whether they are
-  actually the same concept in the same layer. Merge duplicates inside one
-  boundary, but keep separate shapes when one is a DTO, one is a view model, or
-  one is a domain model.
-- Put repository interfaces in `domain/repositories`.
-- Keep request or response shapes next to the route, API client, or use case
-  that owns them. Promote them only after the boundary is stable and truly
-  reused.
-- Do not move transport `Request` or `Response` types into `domain` just
-  because several modules share them.
+- Put invariants in `domain/models` or `domain/value-objects`, and cross-entity
+  rules in `domain/policies`.
+- Define the data need as a **repository port** in `domain/repositories/` and
+  any other outbound need (auth, clock) as a **port** in `domain/ports/`.
+- Keep request/response and query shapes near the adapter or use case that owns
+  them; promote a type into `domain` only when it is a real business concept.
+- Keep `rayfin/data` decorator entities and `@role` policies out of `domain` —
+  they are platform schema, not domain models.
 
 ### 2. Keep view logic out of components
 
-- Build a custom Hook, controller, or view-model module in
-  `app/lib/client/usecase/` for each non-trivial screen or interaction flow.
-- When the interaction has enough complexity to need submodules, create a
-  feature directory and keep the use case internals there.
+- Build a Hook or controller in `src/lib/usecase/<feature>/` for each
+  non-trivial screen or interaction flow; give it a feature directory when it
+  needs submodules.
 - Keep feature-specific presentational components in
-  `app/components/<feature>/` by default. Promote a component to
-  `app/components/shared/` only after it proves to be truly feature-agnostic.
-- Prefer composing views from the component library's primitives before
-  introducing custom low-level controls.
-- Keep on-screen copy terse. Put optional elaboration behind a tooltip,
-  popover, or similar secondary affordance only when the extra detail is not
-  required for task completion.
-- Keep purely presentational responsive adaptation in CSS, layout primitives,
-  and presentational components. Move breakpoint-aware state into `usecase`
-  only when it changes interaction flow or data loading behavior.
-- For chart-heavy views, keep series transformation, grouping, filtering, and
-  drill state in `app/lib/client/usecase/`, and keep chart components focused
-  on rendering, theming, and accessibility wiring.
-- Let that module own:
-  - async calls
-  - reducer logic
-  - derived screen state
-  - event handlers
-  - error and pending mapping
-- Pass view-ready props into `app/components/<feature>/` or
-  `app/components/shared/` when the component is genuinely cross-feature.
+  `src/components/<feature>/`; promote to `src/components/shared/` only when
+  truly feature-agnostic.
+- Let the use case own async calls (through repository ports), reducer logic,
+  derived view state, event handlers, and error/pending mapping. Pass
+  view-ready props into components.
 
-### 3. Use React Router primitives before inventing new state containers
+### 3. Route and navigate declaratively
 
-- Use loader data for route reads.
-- Use action or fetcher state for mutations.
-- Use navigation or fetcher pending state instead of duplicating network flags
-  in component state.
-- Add client state only for interaction state that is not already owned by the
-  router.
+- Compose routes in `App.tsx` with `<Routes>`/`<Route>`, gate protected routes
+  with an `AuthGuard`, and keep each `src/pages/*Page.tsx` thin.
+- Use `useParams`, `useNavigate`, and `<Navigate>` for navigation state instead
+  of duplicating it in component state.
 
-### 4. Move DTOs through the client boundary explicitly
+### 4. Access data through repository ports
 
-- Return JSON DTOs from route loaders, actions, or API endpoints.
-- Let `client/infrastructure/api` fetch those DTOs.
-- Rebuild client-facing objects or value objects inside the owning use case
-  only when that adds real value.
-- Do not expect server-side `Entity` instance identity to cross the network
-  boundary.
+- The use case calls a repository port; the port is implemented in
+  `lib/infrastructure/data/` using `client.data.<Entity>`.
+- Return domain/view models from the repository; scope by `user_id` /
+  `claims.sub` and read the Fabric session inside the adapter.
+- Do not expect Rayfin entity instance identity to survive across the client
+  boundary; treat query results as DTOs.
 
 ### 5. Assemble dependencies at the edge
 
-- Keep `usecase` and `domain` code constructor-injected.
-- Build repository, gateway, and service instances in route loaders, actions,
-  server entry points, or dedicated dependency factories.
-- Prefer manual DI with explicit factory functions before introducing a DI
-  container.
-- Recreate request-scoped dependencies such as transaction-bound repositories
-  from the current request or transaction context.
+- Build the RayfinClient, repositories, and auth service in the composition
+  root (`src/main.tsx`) using factory functions in `lib/infrastructure/config/`.
+- Inject them through constructors, props, or one Context. Prefer manual DI
+  with explicit factories before any DI container.
+- Recreate request-scoped dependencies from the current Fabric session/context
+  rather than from module globals.
 
 ### 6. Validate and map errors by layer
 
-- Keep request parsing and input shape validation at the HTTP or client
-  transport boundary.
-- Keep use-case rule validation in `server/usecase` or `client/usecase`.
-- Keep invariant enforcement in `domain`.
-- Map domain, application, and infrastructure errors to transport responses at
-  the edge.
+- Validate transport/parse shape at the adapter boundary (including Rayfin
+  results and env), use-case rules in `lib/usecase`, and invariants in
+  `lib/domain`.
+- Map Rayfin/network and domain errors to view-facing states in the use case,
+  not inside components.
 
 ### 7. Keep authorization and serialization explicit
 
-- Resolve authentication at the edge, but keep authorization decisions in use
-  cases or domain policies.
-- Convert `Date`, ids, money-like values, and value objects at boundaries
-  rather than leaking transport or ORM shapes inward.
+- Resolve authentication at the edge (composition root / auth adapter), but
+  keep authorization intent in use cases or domain policies even though Rayfin
+  enforces `@role` server-side.
+- Convert `Date`, ids, and value objects at the adapter boundary rather than
+  leaking Rayfin entity shapes inward.
 
 ### 8. Keep mutable state scoped
 
 - Do not store request-specific state in module globals or singleton services.
-- Pass auth context, user context, tenant context, and correlation metadata
-  explicitly.
-- Keep transaction handles scoped to the current transaction only.
+- Pass Fabric session/user context and correlation metadata explicitly.
 - Treat client-side async race conditions as correctness issues and guard
   against stale responses.
 
 ### 9. Use explicit compromises for stateful flows
 
-- For chat, streaming, session, playback, or wizard-style flows, allow a
-  feature-local controller or store when lifecycle and identity genuinely
-  matter.
-- Keep that compromise inside `app/lib/client/usecase/<feature>/` rather than
-  spreading mutable state across routes or components.
+- For streaming, session, playback, or wizard-style flows, allow a
+  feature-local controller or store inside `src/lib/usecase/<feature>/` when
+  lifecycle and identity genuinely matter.
 - Split durable state, ephemeral runtime state, and infrastructure handles
-  explicitly.
+  explicitly. See
+  [`references/stateful-flow-compromises.md`](references/stateful-flow-compromises.md).
 
-### 10. Push side effects and migrations into explicit workflows
+### 10. Keep side effects and platform workflows explicit
 
-- Keep schema changes, background jobs, external notifications, and indexing
-  side effects visible and testable.
-- Do not hide them inside random route handlers or repositories.
+- Keep schema changes and deployment in the Rayfin platform workflow
+  (`rayfin up`, `rayfin up db apply`) — **defer to the `rayfin` skill**, do not
+  hide them in components or adapters.
 - Use barrel exports sparingly and only when they do not obscure ownership or
   create cycles.
 
 ### 11. Verify before completing the change
 
-- Run targeted tests for the touched area.
-- Run typecheck and lint or the project quality gate.
-- Audit for boundary drift and forbidden imports.
+- Run targeted Vitest tests for the touched area, typecheck, and lint.
+- Audit for boundary drift and forbidden imports (Rayfin SDK outside
+  infrastructure, `client.data` outside repositories, React/SDK inside domain).
 - For UI-affecting changes, run the touched route in Playwright and confirm the
   rendered result, interaction states, and responsive layout.
 - Fix architecture violations before considering the change done even if tests
@@ -435,71 +405,68 @@ reference that owns the full detail; load that reference for a matching change.
 
 ### 12. Refactor overloaded files in phases
 
-- When a `ts` or `tsx` file has too many responsibilities, do not rewrite it in
-  one jump.
-- Follow the hotspot workflow in
+- When a `ts`/`tsx` file has too many responsibilities, follow the hotspot
+  workflow in
   [`references/hotspot-refactor-workflow.md`](references/hotspot-refactor-workflow.md).
-- When several hotspots exist, start with the one that combines correctness
-  risk, change frequency, and boundary damage rather than the one that is
-  merely largest.
-- Separate analysis, planning, extraction sequencing, execution, and
-  verification.
-- Move one stable seam at a time and keep the file working after each batch.
+- Prioritize the hotspot that combines correctness risk, change frequency, and
+  boundary damage. Move one stable seam at a time and keep the file working
+  after each batch.
 
 ## Placement Guide
 
-- Need feature-local pure rendering and markup: `app/components/<feature>/`
-- Need reusable pure UI primitives or shared component-library composition
-  wrappers: `app/components/shared/`
-- Need route composition or loader/action bridging: `app/routes/`
+- Need feature-local pure rendering and markup: `src/components/<feature>/`
+- Need reusable pure UI primitives or shared composition wrappers:
+  `src/components/shared/`
+- Need route composition or an auth gate: `src/App.tsx`
+- Need a per-screen route container: `src/pages/<Feature>Page.tsx`
 - Need client-side state, handlers, reducers, selectors, or orchestration:
-  `app/lib/client/usecase/<feature>/`
-- Need browser APIs, API clients, or router adapters:
-  `app/lib/client/infrastructure/`
-- Need endpoint-specific API clients: `app/lib/client/infrastructure/api/`
-- Need browser-only adapters such as storage, clipboard, media queries, or
-  channel APIs: `app/lib/client/infrastructure/browser/`
-- Need a business invariant or behavior-rich model: `app/lib/domain/entities/`
+  `src/lib/usecase/<feature>/`
+- Need view-facing auth state: `src/lib/usecase/auth/`
+- Need a business invariant or behavior-rich model: `src/lib/domain/models/`
 - Need a small immutable business concept with validation:
-  `app/lib/domain/value-objects/`
-- Need cross-entity business rules: prefer `app/lib/domain/policies/`
-- Need domain-level orchestration that is still infrastructure-free:
-  `app/lib/domain/services/`
-- Need a repository port or domain-facing persistence contract:
-  `app/lib/domain/repositories/`
-- Need server orchestration: `app/lib/server/usecase/`
-- Need ORM clients, SDK clients, file system access, or external service code:
-  `app/lib/server/infrastructure/`
-- Need platform-specific server config bootstrap or config readers:
-  `app/lib/server/infrastructure/config/`
-- Need persistence implementations: `app/lib/server/infrastructure/repositories/`
-- Need external SDK or HTTP adapters: `app/lib/server/infrastructure/gateways/`
-- Need a reusable type or utility: place it with the owning route, use case, or
-  domain module first; extract only after repeated reuse proves the boundary
+  `src/lib/domain/value-objects/`
+- Need cross-entity business rules: `src/lib/domain/policies/`
+- Need a persistence port: `src/lib/domain/repositories/`
+- Need another outbound port (auth, clock, notifier): `src/lib/domain/ports/`
+- Need a Rayfin client facade or schema binding:
+  `src/lib/infrastructure/rayfin/`
+- Need a repository implementation over `client.data.<Entity>`:
+  `src/lib/infrastructure/data/`
+- Need an auth-service implementation: `src/lib/infrastructure/auth/`
+- Need a browser adapter (storage, clipboard, media query):
+  `src/lib/infrastructure/browser/`
+- Need env reading or a dependency factory: `src/lib/infrastructure/config/`
+- Need a data-model entity, `@role`, `rayfin.yml`, CLI, or deployment:
+  `rayfin/` — **defer to the `rayfin` skill and its MCP tools**
+- Need a reusable type or utility: place it with the owning use case or domain
+  module first; extract only after repeated reuse proves the boundary
 
 ## References
 
 Read [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
-first, then load only the one or two references that match the change.
+and [`references/design-patterns.md`](references/design-patterns.md) first, then
+load only the one or two references that match the change.
 
-- project bootstrap and baseline dependency install:
-  [`references/project-bootstrap.md`](references/project-bootstrap.md)
 - layout and module placement, always read first:
   [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
-- client, server, and domain layer responsibilities:
+- design patterns (composition root, DI, ports/adapters, repository, strategy,
+  presenter): [`references/design-patterns.md`](references/design-patterns.md)
+- client, domain, and infrastructure layer responsibilities:
   [`references/layer-responsibilities.md`](references/layer-responsibilities.md)
 - boundary and contract rules:
   [`references/boundary-and-contract-rules.md`](references/boundary-and-contract-rules.md)
+- dependency injection, lifetime, and side effects:
+  [`references/dependency-injection-lifetime-and-side-effects.md`](references/dependency-injection-lifetime-and-side-effects.md)
+- Rayfin data access through repository ports:
+  [`references/rayfin-data-access.md`](references/rayfin-data-access.md)
+- declarative routing and navigation:
+  [`references/routing-and-navigation.md`](references/routing-and-navigation.md)
 - domain modeling and type rules:
   [`references/domain-modeling-and-type-rules.md`](references/domain-modeling-and-type-rules.md)
-- dependency injection, lifetime, and side-effect rules:
-  [`references/dependency-injection-lifetime-and-side-effects.md`](references/dependency-injection-lifetime-and-side-effects.md)
-- FlatRoute REST API guidance:
-  [`references/flat-route-rest-api-guidelines.md`](references/flat-route-rest-api-guidelines.md)
 - view-state and handler composition:
   [`references/view-state-and-handler-patterns.md`](references/view-state-and-handler-patterns.md)
-- component file, component-library, and CSS Module rules:
-  [`references/component-file-and-css-module-rules.md`](references/component-file-and-css-module-rules.md)
+- component file and Tailwind styling rules:
+  [`references/component-and-styling-rules.md`](references/component-and-styling-rules.md)
 - chart and responsive/mobile UI guidance:
   [`references/ui-presentation-guidance.md`](references/ui-presentation-guidance.md)
 - Playwright UI verification workflow:
@@ -508,5 +475,7 @@ first, then load only the one or two references that match the change.
   [`references/stateful-flow-compromises.md`](references/stateful-flow-compromises.md)
 - hotspot refactor workflow:
   [`references/hotspot-refactor-workflow.md`](references/hotspot-refactor-workflow.md)
+- project bootstrap with the Rayfin CLI:
+  [`references/project-bootstrap.md`](references/project-bootstrap.md)
 - verification gates:
   [`references/verification-gates.md`](references/verification-gates.md)

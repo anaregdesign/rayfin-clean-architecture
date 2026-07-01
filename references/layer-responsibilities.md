@@ -1,42 +1,53 @@
 # Layer Responsibilities
 
-What belongs in each layer, from `app/routes` and components down through
-`domain` and server infrastructure. Read this alongside
+What belongs in each layer, from `App.tsx` and pages down through `domain` and
+Rayfin infrastructure. Read this alongside
 [`layout-and-module-placement.md`](layout-and-module-placement.md) for where
 files live and
 [`boundary-and-contract-rules.md`](boundary-and-contract-rules.md) for the
 dependency direction these responsibilities must respect.
 
-## Client Layers
+There is no server layer in a Rayfin app: the backend is the managed
+Rayfin/Fabric platform, reached only through `src/lib/infrastructure/`.
 
-### `app/routes/`
+## Presentation Layer
 
-- Define route modules.
-- Read loader and action inputs.
-- Map route data into page composition.
-- Delegate non-trivial logic to `client/usecase` or `server/usecase`.
+### `src/App.tsx`
 
-Do not call ORM clients, SDK clients, or other server-infrastructure modules
-directly; hide business rules in route files; or let route modules become the
-main state container for reusable interactions.
+- Compose the declarative router (`<BrowserRouter>` / `<Routes>` / `<Route>`).
+- Wire route-level guards such as `AuthGuard`.
+- Mount page containers.
 
-### `app/components/<feature>/`
+Do not fetch data, call repositories or the Rayfin client, or hold business
+rules here. See
+[`routing-and-navigation.md`](routing-and-navigation.md).
 
-- Render UI from props.
+### `src/pages/`
+
+- Provide one thin container per screen.
+- Read route params (`useParams`) and navigation helpers.
+- Compose feature components and the feature use-case Hook.
+- Map use-case state into component props.
+
+Do not call `client.data`, own reducer logic, or become the main state
+container for reusable interactions.
+
+### `src/components/<feature>/`
+
+- Render UI from props with Tailwind styling.
 - Hold tiny UI-local state only when it is truly view-local, such as popover
   open state, active tab index, focused element, or an uncontrolled input
   bridge.
 
-Do not fetch data, own mutation orchestration, build DTOs for the server,
-contain business rules or persistence rules, or introduce component-local
-`state/` or `reducers/` directories.
+Do not fetch data, own mutation orchestration, call repositories or the Rayfin
+client, contain business rules, or introduce component-local `state/` or
+`reducers/` directories.
 
-### `app/components/shared/`
+### `src/components/shared/`
 
 - Hold reusable presentational primitives.
 - Keep these components styleable and composable.
-- Treat `shared` as an extraction target, not as the default starting location
-  for new components.
+- Treat `shared` as an extraction target, not the default starting location.
 
 Promote a component to `shared` only when:
 
@@ -46,159 +57,136 @@ Promote a component to `shared` only when:
 4. extraction reduces duplication without turning it into a configurable
    monster
 
-Do not import feature use cases, own feature vocabulary, or hide data fetching
-or mutation logic in `shared`.
+Do not import feature use cases, own feature vocabulary, or hide data access in
+`shared`.
 
-### `app/lib/client/usecase/`
+## Use Case Layer
+
+### `src/lib/usecase/`
 
 - Own screen-level state and event handlers.
 - Assemble view models for components.
-- Coordinate API clients, router calls, optimistic UI, reducers, and derived
+- Coordinate repository ports, navigation, optimistic UI, reducers, and derived
   state.
-- Hold use-case-local DTO mapping when that mapping is part of the interaction
+- Hold use-case-local mapping when that mapping is part of the interaction
   flow.
 - Expose a stable interface for the view layer.
 
-Prefer a feature directory when more than one file is needed for the same
-flow.
+Prefer a feature directory when more than one file is needed for the same flow.
+
+Call outbound work only through **ports** injected into the Hook or read from
+Context. Never import `RayfinClient`, `client.data`, or an auth SDK here.
 
 Reserve `store.ts` for cases where shared identity and lifecycle actually
-matter across multiple sibling views. Do not default to a store when a Hook
-plus reducer is enough.
+matter across multiple sibling views (see
+[`stateful-flow-compromises.md`](stateful-flow-compromises.md)). Do not default
+to a store when a Hook plus reducer is enough.
 
-### `app/lib/client/infrastructure/`
+### `src/lib/usecase/auth/`
 
-- Implement browser-facing and network-facing adapters.
-- Wrap `fetch`, `localStorage`, clipboard, browser events, and router
-  integration.
-- Translate transport details into domain-friendly or usecase-friendly
-  interfaces.
+- Expose view-facing auth state (`user`, `isAuthenticated`, `signIn`,
+  `signOut`) through a Hook and Context.
+- Depend on an injected auth-service **port**, not on a concrete
+  implementation. The composition root supplies the implementation.
 
-Keep framework adapters here, not in a generic common layer.
+## Domain Layer
 
-### `app/lib/client/infrastructure/api/`
+### `src/lib/domain/models/`
 
-- Hold feature or resource API clients.
-- Keep transport and serialization details here.
-- Return shapes that the owning use case can consume directly.
-- Default to JSON DTOs, not domain entity instances.
-- Keep client-side mapping shallow here; put use-case-specific reconstruction
-  in the owning use case.
+- Hold business/view concepts that enforce invariants or domain behavior.
+- Use `class` when identity or invariants matter; otherwise `type` plus
+  functions.
+- Keep them free from React, the Rayfin SDK, browser APIs, and the
+  `rayfin/data` decorator entities.
 
-Client flow should normally be:
+These are **not** the Rayfin `@entity` classes. Rayfin entities are persistence
+schema owned by the platform; domain models are the app's own business/view
+types. A repository maps between them when their shapes diverge.
 
-```text
-client/usecase
-  -> client/infrastructure/api
-  -> HTTP JSON DTO
-  -> server/usecase
-```
-
-### `app/lib/client/infrastructure/browser/`
-
-- Hold browser-only integrations such as `localStorage`, `sessionStorage`,
-  clipboard, media query, `BroadcastChannel`, `IntersectionObserver`, or
-  document event adapters.
-- Keep direct DOM and browser API calls here unless the logic is tiny and
-  strictly component-local.
-
-### Optional `client/infrastructure/repositories/`
-
-Do not make this a baseline directory.
-
-Add a client-side repository layer only when the client must hide multiple
-data sources behind one abstraction, for example:
-
-- IndexedDB plus remote API
-- memory cache plus remote fetch
-- offline-first synchronization
-- local-first conflict handling
-
-If the client is only calling HTTP endpoints, prefer `api/` instead of a
-repository abstraction.
-
-## Server And Domain Layers
-
-### `app/lib/domain/entities/`
-
-- Hold business concepts that enforce invariants or domain behavior.
-- Use `class` when identity or invariants matter.
-- Prefer named methods that express business operations over generic setters.
-- Keep entities free from React, ORM clients, browser APIs, and HTTP concerns.
-
-Do not place `CreateXRequest`, `UpdateXPayload`, or `ListXResponse` types here
+Do not place `CreateXInput`, `UpdateXPayload`, or `ListXResult` types here
 unless they are genuinely domain concepts, which is rare.
 
-### `app/lib/domain/value-objects/`
+### `src/lib/domain/value-objects/`
 
 - Hold small immutable domain concepts with validation and equality semantics.
 - Prefer validated factory functions or constructors over raw object literals.
 - Keep them free from transport, framework, and persistence details.
 
-Do not use value objects as a disguised home for endpoint DTOs.
+### `src/lib/domain/policies/`
 
-### `app/lib/domain/policies/`
-
-- Hold business rules that span multiple entities or require explicit decision
+- Hold business rules that span multiple models or require explicit decision
   logic.
 - Prefer this directory when the code reads like a rule or policy statement.
+- Encode authorization intent here even though Rayfin enforces `@role`
+  server-side; the policy documents and centralizes the app's expectation.
 
-### `app/lib/domain/services/`
+### `src/lib/domain/services/`
 
 - Hold domain-level orchestration that is still infrastructure-free and not
-  naturally owned by a single entity or value object.
-- Use this directory sparingly.
-- Prefer `policies/` when the code is fundamentally a rule, and prefer
-  `services/` only when it is true domain orchestration.
+  naturally owned by a single model or value object.
+- Use sparingly; prefer `policies/` when the code is fundamentally a rule.
 
-### `app/lib/domain/repositories/`
+### `src/lib/domain/repositories/`
 
 - Define repository ports as interfaces or types.
-- Describe what the domain or use case needs from persistence.
-- Keep these contracts independent from any specific ORM, query builder, or
-  storage schema.
-- Treat these as domain-facing persistence ports first.
+- Describe what the use case needs from persistence in domain terms.
+- Keep these contracts independent from Rayfin, `client.data`, and the query
+  DSL.
 
-Do not turn repository ports into generic request or response contract
-storage.
+Do not turn repository ports into generic request/response contract storage.
 
-### `app/lib/server/usecase/`
+### `src/lib/domain/ports/`
 
-- Implement server-side application services.
-- Orchestrate repositories and domain rules.
-- Map between route inputs and domain operations.
-- Accept repositories and gateways through constructors or explicit function
-  parameters.
-- Keep HTTP response formatting and status selection out of this layer.
-- Keep authorization checks and side-effect decisions visible in this layer.
+- Define non-persistence outbound ports the app depends on: auth service,
+  clock, id generator, notifier, feature flags.
+- Keep them small and intention-revealing.
 
-Do not leak ORM types into domain or client layers, or instantiate concrete
-infrastructure-backed repositories inline with `new`.
+## Infrastructure Layer
 
-### `app/lib/server/infrastructure/`
+### `src/lib/infrastructure/rayfin/`
 
-- Hold ORM clients, query builders, SDK clients, repository implementations,
-  external API gateways, filesystem access, and environment-aware wiring.
-- Map storage or service details into repository ports.
-- Hold explicit job or side-effect adapters when a use case must trigger
-  background work.
+- Own the `RayfinClient` singleton and its schema binding
+  (`RayfinClient<TodoAppSchema>`).
+- Expose a small facade so the rest of infrastructure depends on a narrow
+  surface, not on the full SDK.
+- Read the Fabric session here when adapters need it.
 
-This is the only layer that should know about the project's chosen ORM, SQL
-client, or backend SDKs.
+This is one of the only places allowed to import `@microsoft/rayfin-client`.
 
-### `app/lib/server/infrastructure/repositories/`
+### `src/lib/infrastructure/data/`
 
-- Hold repository implementations backed by the project's chosen data stack
-  (ORM, query builder, raw SQL client, filesystem persistence, or remote
-  backend).
-- Accept long-lived clients such as a connection pool, ORM client, or SDK
-  client through constructors so lifetime stays explicit.
-- Keep repositories stateless with respect to request identity, auth state,
-  and current transaction.
+- Hold repository implementations that satisfy `domain/repositories/` ports.
+- Use the typed `client.data.<Entity>` internally
+  (`.select().where().orderBy().execute()`, `.findById()`, `.create()`,
+  `.update()`, `.delete()`).
+- Map Rayfin entity/query shapes to domain/view models at this boundary; scope
+  reads and writes by `user_id` / `claims.sub`.
+- Keep implementations stateless with respect to request identity; take the
+  client and session through the constructor.
 
-### `app/lib/server/infrastructure/gateways/`
+See [`rayfin-data-access.md`](rayfin-data-access.md) for the full data-access
+rules.
 
-- Hold integrations with external SDKs and remote services.
-- Accept SDK clients or configuration through constructors or explicit factory
-  helpers.
-- Keep outbound adapter logic here rather than inside use cases.
+### `src/lib/infrastructure/auth/`
+
+- Hold auth-service implementations that satisfy the `domain/ports/` auth port.
+- Provide at least the strategies the project needs, such as a mock/local-dev
+  service and the Fabric-brokered service.
+- Accept the RayfinClient and config through the constructor.
+
+### `src/lib/infrastructure/browser/`
+
+- Hold browser-only integrations such as `localStorage`, `sessionStorage`,
+  clipboard, media query, `BroadcastChannel`, or `IntersectionObserver`
+  adapters.
+- Keep direct DOM and browser API calls here unless the logic is tiny and
+  strictly component-local.
+
+### `src/lib/infrastructure/config/`
+
+- Read environment configuration (`import.meta.env.VITE_*`) and expose it as a
+  typed, validated object.
+- Hold factory functions that assemble adapters for the composition root
+  (`create-rayfin-client`, `create-auth-service`, `create-repositories`).
+- Treat `import.meta.env` values as `unknown` until validated. Publishable keys
+  (`pk-*`) are client-safe; never place service secrets here.

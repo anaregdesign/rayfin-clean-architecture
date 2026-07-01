@@ -4,8 +4,12 @@
 
 The canonical directory tree is defined in the **Canonical Layout** section of
 [`SKILL.md`](../SKILL.md). Treat that tree as the single source of truth, place
-every file in its canonical owner, and organize directories by responsibility,
-not by team preference or historical drift.
+every file in its canonical owner under `src/`, and organize directories by
+responsibility, not by team preference or historical drift.
+
+The app root is `src/` (the Rayfin template convention, aliased as `@/*`), not
+`app/`. There is no server layer: the backend is the Rayfin/Fabric platform,
+reached only through `src/lib/infrastructure/`.
 
 ## Mandatory Placement Preflight
 
@@ -19,44 +23,62 @@ Use this rule:
 3. do not create a new directory just because the first idea does not fit the
    layout
 
-Treat convenience directories such as `app/features/`, `app/modules/`,
-`app/hooks/`, `app/services/`, `app/utils/`, `app/types/`, or `app/store/` as
+Treat convenience directories such as `src/features/`, `src/modules/`,
+`src/hooks/`, `src/services/`, `src/utils/`, `src/types/`, or `src/store/` as
 layout drift unless an explicit migration plan says otherwise.
+
+## Mapping The Rayfin Template Onto The Layers
+
+The `npm create @microsoft/rayfin` template ships a flat starter structure.
+Map it onto the clean layers as you grow the app:
+
+- template `src/services/rayfinClient.ts` → `src/lib/infrastructure/rayfin/`
+- template `src/services/*AuthService.ts` (+ `IAuthService`) →
+  auth port in `src/lib/domain/ports/` + implementations in
+  `src/lib/infrastructure/auth/`
+- template `src/services/todos.ts` → repository port in
+  `src/lib/domain/repositories/` + implementation in
+  `src/lib/infrastructure/data/`
+- template `src/services/bootstrap.ts` → composition root in `src/main.tsx`
+  plus factories in `src/lib/infrastructure/config/`
+- template `src/hooks/AuthContext.tsx` → `src/lib/usecase/auth/`
+- template `src/pages/`, `src/components/` → unchanged in spirit, kept thin
+
+The platform files under `rayfin/` (`data/*.ts` entities, `rayfin.yml`) stay
+where they are and are owned by the `rayfin` skill, not this one.
 
 ## Feature Presentational Component Placement
 
-Keep feature-specific presentational components in `app/components/<feature>/`.
+Keep feature-specific presentational components in `src/components/<feature>/`.
 
 Preferred shape:
 
 ```text
-app/components/profile-editor/
-  ProfileEditorForm.tsx
-  ProfileEditorForm.module.css
-  ProfileSummaryCard.tsx
-  ProfileSummaryCard.module.css
+src/components/todo/
+  TodoList.tsx
+  TodoListItem.tsx
+  TodoComposer.tsx
 ```
 
 One component per `.tsx` file, and the file name matches the exported
-component name. Each component that needs custom CSS owns a sibling
-`<ComponentName>.module.css` colocated with the component. See
-[`component-file-and-css-module-rules.md`](component-file-and-css-module-rules.md)
-for the full set of component, component-library, and CSS Module rules.
+component name. Style with Tailwind utility classes. See
+[`component-and-styling-rules.md`](component-and-styling-rules.md) for the full
+set of component and styling rules.
 
-Use `app/components/shared/` only when the component is feature-agnostic,
+Use `src/components/shared/` only when the component is feature-agnostic,
 reusable across features, and expressed in generic UI language instead of
 product vocabulary.
 
 ## State Module Placement
 
 For non-trivial client interaction flows, create a feature directory under
-`app/lib/client/usecase/` and colocate the state modules there.
+`src/lib/usecase/` and colocate the state modules there.
 
 Preferred shape:
 
 ```text
-app/lib/client/usecase/thread-composer/
-  use-thread-composer.ts
+src/lib/usecase/todo/
+  use-todo.ts
   state.ts
   reducer.ts
   selectors.ts
@@ -69,11 +91,25 @@ Use these files by responsibility:
 - `state.ts`: state shape and initial state
 - `reducer.ts`: reducer function and action definitions
 - `selectors.ts`: derived read models and computed flags
-- `handlers.ts`: event-to-dispatch mapping or async command helpers
+- `handlers.ts`: event-to-dispatch mapping or async command helpers (calling
+  repository ports through the use case)
 - `use-<feature>.ts`: public Hook or controller entry point
 
-Do not create horizontal buckets such as `app/state/`, `app/reducers/`,
-`app/stores/`, `app/handlers/`, or `app/lib/client/usecase/state/`.
+Do not create horizontal buckets such as `src/state/`, `src/reducers/`,
+`src/stores/`, `src/handlers/`, or `src/lib/usecase/state/`.
+
+## Domain And Infrastructure Placement
+
+- Ports (interfaces the app depends on) live in `src/lib/domain/`:
+  persistence ports in `repositories/`, other outbound ports (auth, clock,
+  notifier) in `ports/`.
+- Adapters (concrete implementations) live in `src/lib/infrastructure/`:
+  the RayfinClient facade in `rayfin/`, repository implementations in `data/`,
+  auth-service implementations in `auth/`, browser adapters in `browser/`, env
+  readers and factories in `config/`.
+- Domain models, value objects, and policies live in `src/lib/domain/` and
+  never import React, the Rayfin SDK, browser APIs, or the `rayfin/data`
+  decorator entities.
 
 ## No Generic Common Bucket
 
@@ -81,7 +117,7 @@ Do not add a catch-all common directory.
 
 Prefer this order instead:
 
-1. Keep code with the route, use case, or domain module that owns it.
+1. Keep code with the use case, domain, or infrastructure module that owns it.
 2. Duplicate a tiny utility once if the reuse pattern is still uncertain.
 3. Extract only after the abstraction is clearly stable.
 
@@ -92,9 +128,8 @@ internals.
 
 Prefer:
 
-- `client/usecase/<feature>/use-<feature>.ts` as the public client entry
-- `server/usecase/<feature>/index.ts` or one primary use-case module as the
-  public server entry
+- `lib/usecase/<feature>/use-<feature>.ts` as the public use-case entry
+- one primary port or adapter module as the public data entry
 
 Avoid importing another feature's private files such as `reducer.ts`,
 `selectors.ts`, `handlers.ts`, or `state.ts`.
@@ -107,13 +142,13 @@ internals.
 Common bad cycles:
 
 - `selectors -> handlers -> reducer -> selectors`
-- `route -> usecase -> route`
+- `page -> usecase -> page`
 - `infrastructure -> usecase -> infrastructure`
 
 When a cycle appears:
 
 1. move shared pure logic to a lower-level leaf module
-2. invert the dependency through an interface or parameter
+2. invert the dependency through a port or parameter
 3. merge modules back together if the split was artificial
 
 ## TS And TSX Naming Rule
@@ -123,24 +158,22 @@ the file.
 
 Use these defaults:
 
-- route modules: follow FlatRoute naming, such as `api.orders.ts`,
-  `api.orders.$orderId.ts`, or `settings.profile.tsx`
+- page containers: `PascalCase.tsx` ending in `Page`, such as `TodoPage.tsx`
 - React component files: `PascalCase.tsx`
-- non-component modules: responsibility-based `kebab-case.ts`
+- non-component modules: responsibility-based `kebab-case.ts`, such as
+  `todo-repository.ts`
 
 For component files:
 
 - one React component per `.tsx` file
 - the primary exported component name matches the file name exactly
-  (`UserMenu.tsx` exports `UserMenu`)
+  (`TodoList.tsx` exports `TodoList`)
 - use `.tsx` only when the file renders JSX
-- the component's CSS lives in a sibling `<ComponentName>.module.css` when it
-  needs custom CSS
-- keep feature-specific views under `app/components/<feature>/` until they
-  prove to be generic enough for `app/components/shared/`
+- keep feature-specific views under `src/components/<feature>/` until they
+  prove generic enough for `src/components/shared/`
 
-See [`component-file-and-css-module-rules.md`](component-file-and-css-module-rules.md)
-for the full component, component-library, and CSS Module conventions.
+See [`component-and-styling-rules.md`](component-and-styling-rules.md) for the
+full component and Tailwind conventions.
 
 Inside a feature directory, short file names such as `state.ts`, `reducer.ts`,
 `selectors.ts`, `handlers.ts`, and `types.ts` are acceptable because the
@@ -153,16 +186,16 @@ Use `index.ts` only when it is a deliberate public entry point.
 
 ## Typical Flow
 
-For a form submission:
+For creating a todo:
 
-1. A route module renders a container page.
-2. A client use case Hook owns the draft state and handlers.
-3. A presentational component renders fields and calls passed handlers.
-4. A client infrastructure API client sends the request or a route action
-   handles it.
-5. A server use case applies the business rule.
-6. A server infrastructure repository persists through the project's chosen
-   ORM, query builder, or storage client.
+1. `App.tsx` mounts a route to a thin `src/pages/TodoPage.tsx`.
+2. A client use-case Hook (`src/lib/usecase/todo/use-todo.ts`) owns the draft
+   state and handlers.
+3. A presentational component (`src/components/todo/TodoComposer.tsx`) renders
+   fields and calls passed handlers.
+4. The handler calls a repository port through the use case.
+5. The repository implementation (`src/lib/infrastructure/data/todo-repository.ts`)
+   runs `client.data.Todo.create(...)` and maps the result to a view model.
 
-Each step should only depend on the next layer inward or on an adapter
-explicitly created for that boundary.
+Each step should only depend on the next layer inward or on a port explicitly
+created for that boundary.

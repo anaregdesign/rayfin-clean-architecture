@@ -1,225 +1,90 @@
 # Project Bootstrap
 
-Use this guide when starting a new project from scratch.
+Use this guide when starting a new Rayfin app from scratch.
 
 ## Baseline Assumptions
 
-Assume this stack unless the user explicitly says otherwise:
+A Rayfin app uses this stack:
 
-- TypeScript
-- React Router framework mode
-- SPA mode with `ssr: false`
-- A single component library for the UI layer (the project's choice; follow an
-  existing component-library standard when the repository already has one)
-- Node.js 20.19+ or 22.x
-
-This skill does not pick the data stack. Whichever ORM, query builder, SQL
-client, or remote backend you choose, confine its imports to
-`app/lib/server/infrastructure/` and keep the rest of the layer rules
-unchanged.
-
-If a companion hosting skill explicitly requires a server runtime or a
-secretless platform-config bootstrap, let that companion override the `ssr:
-false` and local config-loading defaults in this file while keeping the rest
-of the layer rules.
+- TypeScript with TC39 Stage 3 decorators (`ESNext.Decorators` in tsconfig
+  `lib`); never enable `experimentalDecorators` or `emitDecoratorMetadata`
+- React 19 + Vite
+- `react-router-dom` in declarative mode
+- Tailwind CSS (v4 via `@tailwindcss/vite`)
+- `@microsoft/rayfin-{core,client,data}` for the data model and typed client
+- Fabric authentication (`@microsoft/rayfin-auth-provider-fabric`)
+- Vitest + Testing Library for tests
+- No app-owned server: the backend is the managed Rayfin/Fabric platform (DAB)
 
 ## Preferred Bootstrap Path
 
-For this skill's architecture, prefer React Router's official Vite-powered
-bootstrap over retrofitting a plain Vite template.
-
-Reason:
-
-- it matches `app/` and route-module conventions
-- it keeps React Router configuration aligned with current framework mode
-- it reduces manual setup drift before architecture work even starts
-
-In practice, it is usually cleaner to install the baseline routing and UI
-dependencies the project already knows it will need before feature
-implementation starts, rather than adding them piecemeal in the middle of the
-first feature. Install the chosen data stack at the same time using whatever
-its own install instructions require.
-
-## Baseline Dependencies To Have Ready
-
-For the default stack in this skill, the baseline dependency set to line up
-early is:
-
-- Route-file support: `@react-router/fs-routes`
-- The project's chosen component library, plus a matching icon set, when no
-  existing component library overrides it
-
-In practice, that usually means installing the route-file helper soon after
-scaffold:
+Scaffold with the Rayfin CLI. It generates the correct decorator tsconfig, the
+Tailwind + Vite wiring, the `rayfin/` schema scaffold, `AGENTS.md`, and
+`.mcp.json` for the `rayfin` MCP server.
 
 ```bash
-npm install @react-router/fs-routes
-# then install the component library the project has chosen
-```
-
-If the repository already has an established component library, use that library
-instead of adding another component library casually.
-
-Install the data stack of your choice (ORM, query builder, SDK, or HTTP
-backend client) separately, following that stack's own documentation. Keep
-every import of that stack inside `app/lib/server/infrastructure/`.
-
-## Recommended Flow
-
-### 1. Scaffold the app
-
-```bash
-npx create-react-router@latest my-app
+npm create @microsoft/rayfin@latest my-app
 cd my-app
+npm run dev   # deploys to Fabric as configured, then starts Vite
 ```
 
-Use the TypeScript option when prompted.
+Pick the template that fits (Blank App, Data App, Todo variants). Do not
+retrofit a plain `create-vite` template — you would have to recreate the
+decorator config, schema scaffold, and MCP wiring by hand.
 
-Keep the standard mobile viewport tag in the document head:
+Before writing entities or queries, consult the bundled `rayfin` skill / MCP
+`search_docs('known limitations')` for platform constraints. Entity decorators,
+`@role`/RLS, `rayfin.yml`, and deployment are **owned by the `rayfin` skill**,
+not this one.
 
-```html
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-```
+## Grow The Layers As Needed
 
-Add `viewport-fit=cover` only when the layout intentionally handles safe-area
-insets.
-
-### 2. Switch the app to SPA mode by default
-
-Create or update `react-router.config.ts`:
-
-```ts
-import type { Config } from "@react-router/dev/config";
-
-export default {
-  ssr: false,
-} satisfies Config;
-```
-
-This keeps React Router in SPA mode while still using framework conventions.
-If a companion hosting skill explicitly requires server runtime features such
-as OAuth callbacks, server-owned secrets, or platform-managed config
-bootstrap, do not force `ssr: false`.
-
-### 3. Enable FlatRoute file routing
-
-Install the file-route helper:
-
-```bash
-npm install @react-router/fs-routes
-```
-
-Create or update `app/routes.ts`:
-
-```ts
-import { flatRoutes } from "@react-router/fs-routes";
-import type { RouteConfig } from "@react-router/dev/routes";
-
-export default flatRoutes() satisfies RouteConfig;
-```
-
-This is the cleanest match for the route-file conventions used by this skill.
-
-### 4. Install the component library
-
-Install the component library the project has chosen, following its own
-documentation. Wrap the app root with the library's theme provider and the
-appropriate theme once, at the highest sensible boundary, before building
-feature screens:
-
-```tsx
-import { ThemeProvider, appTheme } from "<your-component-library>";
-
-export function AppShell({ children }: { children: React.ReactNode }) {
-  return <ThemeProvider theme={appTheme}>{children}</ThemeProvider>;
-}
-```
-
-If the repository already has a clearly established component library, follow
-that library instead of mixing component libraries casually.
-
-### 5. Pick and install the data stack
-
-This skill is intentionally silent on which ORM, query builder, or database
-engine to use. Decide once at bootstrap time, document the choice in the
-project, and install it following its own documentation.
-
-When integrating it, keep these rules:
-
-- every import of the chosen ORM, query builder, database driver, or remote
-  backend SDK must live under `app/lib/server/infrastructure/`
-- repository interfaces stay in `app/lib/domain/repositories/`
-- repository implementations stay in
-  `app/lib/server/infrastructure/repositories/`
-- a long-lived client (connection pool, ORM client, SDK client) is
-  constructed once in a server-only bootstrap module under
-  `app/lib/server/infrastructure/` and shared by injection, not by import
-  side effects
-- environment-driven configuration (database URL, API base URL, secrets) is
-  read inside `app/lib/server/infrastructure/config/`, not inside route or
-  use-case modules
-
-If the chosen stack ships its own scaffold, migration, or codegen tooling,
-keep those commands documented in the project (`README.md`, `package.json`
-scripts), but do not let their generated client leak out of
-`app/lib/server/infrastructure/`.
-
-### 6. Create the first architecture-aligned directories
-
-Do not create every possible directory up front.
-
-Create only the ones needed for the first feature or integration, usually:
+Do not create every directory up front. Start from the template's `src/` and
+introduce the clean layers as the first real feature needs them:
 
 ```text
-app/routes/
-app/components/
-app/lib/client/usecase/
-app/lib/server/usecase/
-app/lib/server/infrastructure/
-app/lib/domain/
+src/
+  main.tsx                     # composition root
+  App.tsx                      # declarative routes + AuthGuard
+  pages/
+  components/<feature>/
+  lib/usecase/<feature>/
+  lib/domain/{models,repositories,ports}/
+  lib/infrastructure/{rayfin,data,auth,config}/
 ```
 
-Add deeper directories such as `entities/`, `value-objects/`, `repositories/`,
-or `gateways/` when the first real owner appears.
+Map the template's starter files onto the layers as described in
+[`layout-and-module-placement.md`](layout-and-module-placement.md): `services/`
+→ `lib/infrastructure/`, `hooks/` → `lib/usecase/`.
 
-## Plain Vite Fallback
+## Wire The Composition Root First
 
-Use plain Vite bootstrap only when one of these is true:
+Before layering features, establish the dependency-injection spine:
 
-- the user explicitly requires `create-vite`
-- the project intentionally uses React Router data mode or declarative mode
-  instead of framework mode
-- an existing starter must be retrofitted
+1. `lib/infrastructure/config/` reads and validates `import.meta.env.VITE_*`
+2. `lib/infrastructure/rayfin/` builds the `RayfinClient` facade
+3. `lib/infrastructure/config/` factories assemble the auth service and
+   repositories (Strategy: mock/local vs Fabric)
+4. `src/main.tsx` calls the factories and injects the result through providers
 
-Fallback start:
+This makes [`design-patterns.md`](design-patterns.md) and
+[`dependency-injection-lifetime-and-side-effects.md`](dependency-injection-lifetime-and-side-effects.md)
+concrete from the first screen.
 
-```bash
-npm create vite@latest my-app -- --template react-ts
-cd my-app
-```
+## First Feature Checklist
 
-Then:
+For the first data-backed feature:
 
-1. install the React Router packages required by the chosen mode
-2. if you need this skill's framework conventions such as `app/routes/`,
-   route modules, and FlatRoute naming, prefer re-bootstrapping with
-   `create-react-router` instead of manually recreating the framework stack
-3. install and wire the chosen data stack exactly as above
+- domain model in `lib/domain/models/`
+- repository port in `lib/domain/repositories/`
+- Rayfin adapter in `lib/infrastructure/data/` (uses `client.data.<Entity>`)
+- use-case Hook in `lib/usecase/<feature>/`
+- presentational components in `components/<feature>/`
+- a thin page container in `pages/` wired into `App.tsx`
 
-Do not treat plain `create-vite` as the default when the target architecture
-is React Router framework mode.
+## Platform And Deployment
 
-## Bootstrap Verification
-
-Before starting feature work, confirm all of the following:
-
-- `npm run dev` starts successfully
-- SPA mode is enabled
-- the standard mobile viewport meta tag is present
-- FlatRoute routing is wired through `app/routes.ts`
-- the chosen component library is installed and the app root is wrapped with
-  its theme provider, unless an existing component library overrides it
-- the chosen data stack is installed
-- no import of the chosen ORM, query builder, or SDK exists outside
-  `app/lib/server/infrastructure/`
-- route modules and domain folders are present, even if still minimal
+Schema migration and deployment run through the Rayfin CLI (`rayfin up`,
+`rayfin up db apply`) and are **owned by the `rayfin` skill**. Keep this skill
+focused on the `src/` code architecture and hand platform work to the `rayfin`
+skill and its MCP tools.

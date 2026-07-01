@@ -4,168 +4,135 @@
 
 Run verification in this order:
 
-1. Targeted tests for the changed behavior
-2. Typecheck
-3. Lint or project quality gate
+1. Targeted Vitest tests for the changed behavior
+2. Typecheck (`tsc -b`)
+3. Lint (`npm run lint`) or the project quality gate
 4. Architecture drift checks
-5. Playwright check of the touched route when UI is affected, including mobile
-   viewport verification when layout or interaction is responsive
+5. Playwright check of the touched route when UI is affected, including a
+   narrow mobile viewport when layout or interaction is responsive
 6. Manual spot check of the touched flow
 
-Code that passes tests but breaks layer direction is not done.
-UI-affecting changes that were never checked in a real rendered browser flow
-are not done.
+Code that passes tests but breaks layer direction is not done. UI-affecting
+changes never checked in a real rendered browser flow are not done.
 
 ## Architecture Drift Checklist
 
 Confirm all of the following:
 
-- no ORM, query builder, or data-client imports outside
-  `app/lib/server/infrastructure/`
-- no server imports inside `app/components/` or `app/lib/client/*`
-- no React or browser imports inside `app/lib/domain/*`
+- no `@microsoft/rayfin-client`, `RayfinClient`, or `client.data` import outside
+  `src/lib/infrastructure/`
+- no auth SDK import outside `src/lib/infrastructure/auth/` (and the client
+  facade)
+- no React, `react-router-dom`, or browser API import inside `src/lib/domain/*`
+- no `rayfin/data` entity import inside `src/lib/domain/*`
+- no repository or auth service reached from a component/page without going
+  through a use case and port
 - no generic catch-all common directory reintroduced
-- no convenience top-level buckets such as `app/features/`, `app/modules/`,
-  `app/hooks/`, `app/services/`, `app/utils/`, `app/types/`, or `app/store/`
+- no convenience top-level buckets such as `src/features/`, `src/modules/`,
+  `src/hooks/`, `src/services/`, `src/utils/`, `src/types/`, or `src/store/`
   introduced without an explicit migration plan
-- no horizontal `state`, `reducers`, `stores`, or `handlers` directories
-  introduced under `app/`
+- no horizontal `state`, `reducers`, `stores`, or `handlers` directories under
+  `src/`
 - no feature-specific presentational component placed outside
-  `app/components/<feature>/` without a deliberate reason
-- no feature-specific logic imported into `app/components/shared/`
-- no component moved into `shared` only for convenience while still carrying
-  feature vocabulary
-- no client adapter pretending to return server-side live instances across the
-  network
-- no transport `Request` or `Response` DTOs promoted into `domain` without
-  domain meaning
-- no `usecase` or `domain` module instantiating repositories or gateways
-  directly
-- no module-level mutable server state carrying request or user context
-- no circular imports introduced across feature internals or layers
-- no authorization rule enforced only in the UI
-- no boundary object such as `Date`, ORM record, or raw persistence shape
-  leaking where a mapped shape should exist
-- no business logic buried in route modules
+  `src/components/<feature>/` without a deliberate reason
+- no feature-specific logic imported into `src/components/shared/`
+- no `usecase` or `domain` module instantiating a repository or auth service
+  with `new`
+- no service locator or module-level mutable singleton carrying Fabric session
+  or user context
+- no `import.meta.env` read outside `src/lib/infrastructure/config/`
+- no `if (localDev)` / environment branch outside
+  `src/lib/infrastructure/config/`
+- no circular imports across page, use case, or infrastructure boundaries
+- no authorization rule that exists only in the UI with no reliance on `@role`
+- no Rayfin entity object or `Date` leaking into domain rules unchanged
+- no business logic buried in page containers or route elements
 - no non-trivial async orchestration left inside presentational components
 - no new vague file names such as `helpers.ts`, `utils.ts`, or `common.ts`
-- no DTO or response-envelope classes introduced where `type` plus functions
+- no DTO or view-model shapes turned into classes where `type` plus functions
   would be clearer
-- no entity reduced to public mutable fields plus generic setters
-- no `interface` used for one-off DTOs or `I*`-prefixed port names without a
-  strong reason
-- no parallel same-role modules left in one boundary without a clear
-  ownership distinction
-- no forced merge that collapses DTOs, view models, persistence records, and
-  domain models into one shape
-- no catch-all `constants` dump created without a clear ownership boundary
-- no business rule encoded only as scattered magic numbers or strings
-- no raw `unknown` value flowing past its trust boundary without narrowing or
-  parsing
-- no `.tsx` file under `app/components/` exporting more than one top-level
-  React component, and no file whose primary exported component name disagrees
-  with the file name
-- no component-owned CSS imported as a non-module stylesheet inside a
-  component module; per-component styling lives in a sibling
-  `<ComponentName>.module.css` (or the component library's styling solution)
-- no feature-specific selectors or component-name selectors added to global
-  stylesheets under `app/styles/`
-- no inline `style={{ ... }}` used for static styling that belongs in a CSS
-  Module or the component library's styling solution
-- no second general-purpose component library introduced alongside the
-  project's chosen one without a documented deviation
+- no `interface` used for one-off DTOs, and no new `I*`-prefixed port names
+  beyond an existing template convention
+- no raw `unknown` value flowing past its trust boundary without narrowing
+- no `.tsx` file under `src/components/` exporting more than one top-level React
+  component, and no file whose primary exported component name disagrees with
+  the file name
+- no `client.data`, `RayfinClient`, or auth SDK import inside a component or
+  page
+- no CSS Modules or a second general-purpose component library introduced as a
+  requirement (styling is Tailwind)
+- no inline `style={{ ... }}` used for static styling that belongs in a Tailwind
+  class
+- no feature-specific or component-name selectors added to the global
+  stylesheet
+- no `flatRoutes()`, framework-mode route files, or loader/action data APIs
+  introduced (routing is declarative)
 
 ## Useful Search Patterns
 
-Use `rg` for quick audits. Adjust the data-client name (`prisma`, `drizzle`,
-`kysely`, `pg`, etc.) to whatever the project actually picked:
+Use `rg` for quick audits from the app root:
 
 ```bash
-rg -n "lib/server" app/routes app/components app/lib/client
-rg -n "from ['\"][^'\"]*react" app/lib/domain
-find app/lib -maxdepth 2 -type d | sort
-find app -type d \( -name features -o -name modules -o -name hooks -o -name services -o -name utils -o -name types -o -name store \) | sort
-find app -type d \( -name state -o -name states -o -name reducer -o -name reducers -o -name store -o -name stores -o -name handler -o -name handlers \) | sort
-rg -n "lib/client/usecase|lib/server|routes/" app/components/shared
-rg -n "Thread|Chat|Billing|Project|Profile|Order|Invoice|Session" app/components/shared
-rg -n "new [A-Z][A-Za-z0-9_]+\(|instanceof " app/lib/client
-rg -n "Request|Response|Payload|Dto|DTO" app/lib/domain
-rg -n "new .*Repository|new .*Gateway" app/lib/domain app/lib/server/usecase
-rg -n "let current|let active|let request|let user|let tenant|globalThis\.|module\.exports\." app/lib/server
-madge --circular app 2>/dev/null || true
-rg -n "index\.ts$" app
-rg --files app | rg "/(helpers|utils|common|misc|temp|new)\.(ts|tsx)$"
-rg -n "useEffect\(" app/components
+# Rayfin SDK / data client must stay inside lib/infrastructure
+rg -n "@microsoft/rayfin-client|client\.data|RayfinClient" src/pages src/components src/lib/usecase src/lib/domain
 
-# One component per file: scan exports under app/components and confirm each
-# file exposes exactly one top-level React component whose name matches the
-# file. Investigate any file with multiple `export` lines at the top level.
-rg -n "^export (default |const |function )" app/components
+# Domain must be free of React, router, browser, and rayfin/data entities
+rg -n "from ['\"][^'\"]*(react|react-router|rayfin/data)" src/lib/domain
 
-# CSS Modules colocated with components: every styled component should have a
-# sibling .module.css. Investigate any orphan stylesheet or component that
-# imports styles through a different path.
-find app/components -name "*.tsx" -print
-find app/components -name "*.module.css" -print
+# env only in config
+rg -n "import\.meta\.env" src --glob '!src/lib/infrastructure/config/**'
 
-# No global CSS imports inside components.
-rg -n "import .*\.css['\"]" app/components | rg -v "\.module\.css"
+# no new use of new Repository/Service in usecase/domain
+rg -n "new [A-Z][A-Za-z0-9_]*(Repository|Service)\(" src/lib/usecase src/lib/domain
 
-# Inline style usage. Inspect each match and confirm it is a genuinely dynamic
-# runtime value, not static styling that belongs in a CSS Module.
-rg -n "style=\{\{" app/components
+# convenience buckets and horizontal dirs
+find src -type d \( -name features -o -name modules -o -name hooks -o -name services -o -name utils -o -name types -o -name store \) | sort
+find src -type d \( -name state -o -name reducers -o -name stores -o -name handlers \) | sort
+
+# one component per file: inspect files with multiple top-level exports
+rg -n "^export (default |const |function )" src/components
+
+# styling: no CSS Modules, no static inline style, no global CSS import in a component
+rg -n "\.module\.css" src
+rg -n "style=\{\{" src/components
+rg -n "import .*\.css['\"]" src/components
+
+# routing: declarative only
+rg -n "flatRoutes|@react-router/fs-routes|export const loader|export const action" src
 ```
 
-When the project's data stack is an ORM or SDK with a clear import root, add
-one focused audit for it, for example:
-
-```bash
-rg -n "@prisma/client" app   # adapt the package name to the chosen stack
-```
-
-Interpret results, do not blindly fail on matches. The point is to surface
+Interpret results; do not blindly fail on matches. The point is to surface
 suspicious files quickly.
 
 ## Completion Gate Heuristic
 
 Before considering the change complete, be able to state all of the following:
 
-- the use case layer owns the interaction logic
-- the view layer is mostly props plus rendering
-- feature-local presentational components live under `app/components/<feature>/`
+- the use-case layer owns the interaction logic
+- the view layer is mostly props plus rendering, styled with Tailwind
+- feature-local presentational components live under `src/components/<feature>/`
 - `components/shared` stays presentational and feature-agnostic
-- components started life under `app/components/<feature>/` unless they proved
-  to be generic
 - reducer and state modules live with their owning feature use case
-- client data access returns DTOs unless a real local-first repository
-  abstraction is justified
-- transport contracts still live near their boundary unless they have become
-  true domain concepts
-- dependencies are wired at the edge rather than instantiated inside use cases
-- mutable request context does not leak through singleton or module-level
+- all data access goes through a repository port; `client.data` stays inside
+  `src/lib/infrastructure/data/`
+- ports live in `domain`; adapters live in `infrastructure`; nothing inner
+  imports the Rayfin SDK
+- dependencies are assembled in the composition root and injected, not
+  instantiated inside use cases
+- the Strategy choice (mock vs Fabric) lives in a factory, not scattered in
+  branches
+- Fabric session/user context does not leak through singleton or module-level
   state
-- validation rules live at the correct layer rather than collapsing into one
-  layer
-- errors are mapped intentionally rather than leaking raw infrastructure
-  failures
-- authorization has a server-side home and is not only a UI concern
-- serialization boundaries remain explicit
-- server persistence goes through server infrastructure
-- file names reveal module responsibility without fallback names like
-  `helpers` or `utils`
-- classes are used for identity and invariants, not as generic containers or
-  static utility bags
-- `interface` is used for ports and stable object contracts, while `type` owns
-  DTOs and unions
-- the app is domain-centered for business behavior without pushing UI, HTTP,
-  or persistence details into `domain`
-- constants live with their owner instead of drifting into a global junk
-  drawer
-- `unknown` is used as a boundary quarantine type rather than a long-lived
-  internal type
-- reusable helpers still live in a specific owning layer unless the
-  abstraction is clearly stable
-- the changed area has tests or a clear reason why tests were not added
+- validation lives at the correct layer; errors are mapped intentionally rather
+  than leaking raw SDK failures
+- authorization intent has a home in use cases/policies and relies on `@role`
+  server-side, not on UI visibility alone
+- Rayfin entity shapes and `Date` are mapped at the adapter boundary
+- routing is declarative; pages are thin
+- file names reveal responsibility without `helpers`/`utils`/`common`
+- classes are used for identity and invariants, `type` for DTOs/view models
+- `unknown` is used as a boundary quarantine type
+- the changed area has tests or a clear reason why not
 - UI-affecting changes were checked in Playwright at the relevant route,
   viewport sizes, and orientation when needed
 

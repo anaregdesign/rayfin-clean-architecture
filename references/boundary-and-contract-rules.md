@@ -5,41 +5,55 @@
 Follow this direction strictly:
 
 ```text
-routes/components
-  -> client/usecase
-  -> client/infrastructure
-  -> domain
+App.tsx / pages / components
+  -> lib/usecase
+  -> lib/domain (models, value-objects, policies, repositories, ports)
 
 components/shared
   -> nothing application-specific
 
-server/usecase
-  -> domain
-  -> domain/repositories
+lib/infrastructure
+  -> lib/domain (implements its ports)
+  -> Rayfin SDK, browser APIs, rayfin/data schema (for the typed client)
 
-server/infrastructure
-  -> domain
-  -> external systems
+lib/domain
+  -> lib/domain only
 ```
 
-Treat `domain` as the inner policy layer and `server/infrastructure` as the
-outer integration layer.
+Treat `lib/domain` as the inner policy layer and `lib/infrastructure` as the
+outer integration layer. The composition root (`src/main.tsx`) is the only
+module allowed to import across all layers to wire them together.
+
+## Ports And Adapters Rule
+
+Every outbound dependency crosses a port:
+
+- persistence → a repository port in `lib/domain/repositories/`, implemented in
+  `lib/infrastructure/data/`
+- auth, clock, id generation, notification → a port in `lib/domain/ports/`,
+  implemented in `lib/infrastructure/`
+
+Use cases and domain depend on the port type. They must never import
+`RayfinClient`, `client.data`, or an auth SDK. The adapter depends on the port
+(implements it) and on the Rayfin SDK.
 
 ## Contract Placement Rule
 
-Do not move API `Request` or `Response` structures into `domain` just because
-they are reused.
+Do not move query, input, or response shapes into `domain` just because they
+are reused.
 
 Use this decision order:
 
-1. Keep route-specific transport shapes near the owning route or server use
-   case.
-2. Keep client transport DTOs near the owning API client.
-3. Promote a type into `domain` only when it is a real business concept with
-   invariants.
-4. If transport contracts become broadly shared across many boundaries,
-   introduce a dedicated `app/lib/contracts/` directory later instead of
-   polluting `domain`.
+1. Keep a repository's input/result shapes near the port or its adapter.
+2. Keep view models near the owning use case.
+3. Promote a type into `domain/models` only when it is a real business concept
+   with invariants.
+4. If contracts become broadly shared across many boundaries, introduce a
+   dedicated `src/lib/contracts/` directory later instead of polluting
+   `domain`.
+
+The Rayfin `@entity` classes in `rayfin/data` are platform schema, not domain
+contracts. Never import them into `lib/domain`.
 
 ## Constant Placement Rule
 
@@ -62,29 +76,26 @@ Validate at the narrowest boundary that can correctly own the rule.
 
 Use this split:
 
-- routes and API adapters: request shape, query parsing, content-type,
-  required fields, basic schema validation
-- use cases: permission checks, workflow preconditions, cross-field application
-  rules
-- domain: business invariants that must always hold
-- infrastructure: persistence constraints and external service response
-  validation
+- adapters (`lib/infrastructure`): shape of Rayfin query results, env values,
+  and browser inputs crossing into the app; treat them as `unknown` first
+- use cases (`lib/usecase`): permission intent, workflow preconditions,
+  cross-field application rules
+- domain (`lib/domain`): business invariants that must always hold
 
-Do not push domain invariants outward just because the route can reject early,
-and do not pull HTTP-specific validation into `domain`.
+Do not push domain invariants outward just because the UI can reject early, and
+do not pull Rayfin-specific parsing into `domain`.
 
 ## Error Mapping Rule
 
 Keep error categories explicit:
 
-- transport errors
+- infrastructure errors (Rayfin/network/auth SDK failures)
 - application or use-case errors
 - domain errors
-- infrastructure errors
 
-Use cases should return or throw errors that still make sense without HTTP.
-Route modules should translate those errors into status codes and response
-envelopes.
+Adapters translate Rayfin/network failures into meaningful application errors
+at the boundary. Use cases map those into view-facing pending/error states.
+Components render the mapped state; they do not catch raw SDK errors.
 
 ## Authorization Ownership Rule
 
@@ -92,44 +103,47 @@ Keep authentication and authorization distinct.
 
 Use this split:
 
-- route or server entry: resolve the current principal or session
-- use case: decide whether the requested operation is allowed
-- domain policy: enforce reusable business authorization rules when they are
-  part of the domain language
+- composition root / auth adapter: resolve the current Fabric principal or
+  session
+- use case: decide whether the requested operation is allowed in app terms
+- domain policy: enforce reusable business authorization rules
 
-Do not bury authorization in repositories, and do not make UI visibility checks
-the only access control.
+Rayfin enforces access server-side through `@role` policies, but keep the app's
+authorization intent explicit in use cases and policies. Do not make UI
+visibility the only access control, and do not bury authorization inside
+repositories.
 
 ## Serialization Rule
 
-Convert between transport, persistence, and domain shapes at explicit
-boundaries.
+Convert between Rayfin entity shapes, transport values, and domain shapes at
+explicit boundaries.
 
 Do not let these cross boundaries unchanged without intent:
 
 - `Date`
-- database ids
+- ids and `user_id` / `claims.sub` values
 - money-like values
-- enums with transport-specific names
 - value objects
+- raw Rayfin entity objects
 
-Prefer DTOs with primitives over leaking runtime-rich objects across HTTP.
+Prefer domain/view models with primitives over leaking runtime-rich Rayfin
+objects into use cases and components.
 
 ## Import Smell Checks
 
 Treat these as architecture failures:
 
-- `components` importing server modules or ORM/SDK data clients
-- `components/shared` importing feature-specific client use cases
-- `client/usecase` importing server modules
-- `domain` importing React Router, browser APIs, ORM clients, or any
-  infrastructure SDK
-- `server/usecase` depending on concrete repository classes when a repository
-  port would do
-- transport `Request` or `Response` types being moved into `domain` without
-  real business invariants
-- `usecase` code constructing its own repositories or gateways with `new`
-- module-level mutable server state holding request or user context
-- circular imports across route, use case, or infrastructure boundaries
-- authorization enforced only in the UI with no server-side check
-- persistence or transport serialization leaking directly into domain rules
+- `components`, `pages`, `lib/usecase`, or `lib/domain` importing
+  `@microsoft/rayfin-client`, `client.data`, or an auth SDK
+- `lib/domain` importing React, `react-router-dom`, browser APIs, or the
+  `rayfin/data` entities
+- `components/shared` importing feature-specific use cases
+- a use case constructing its own repository or auth service with `new`
+- a repository or auth service reachable from a component without going through
+  a use case and port
+- module-level mutable state holding Fabric session or user context
+- circular imports across page, use case, or infrastructure boundaries
+- authorization enforced only in the UI with no reliance on `@role`
+- Rayfin entity objects or `Date` leaking into domain rules unchanged
+- `I*`-prefixed port names added gratuitously (an existing convention such as
+  the template's `IAuthService` may be kept, but do not spread the prefix)
