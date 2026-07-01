@@ -6,21 +6,21 @@ Follow this direction strictly:
 
 ```text
 App.tsx / pages / components
-  -> lib/usecase
-  -> lib/domain (models, value-objects, policies, repositories, ports)
+  -> usecase
+  -> domain (models, value-objects, policies, repositories, ports)
 
 components/shared
   -> nothing application-specific
 
-lib/infrastructure
-  -> lib/domain (implements its ports)
+infrastructure
+  -> domain (implements its ports)
   -> Rayfin SDK, browser APIs, rayfin/data schema (for the typed client)
 
-lib/domain
-  -> lib/domain only
+domain
+  -> domain only
 ```
 
-Treat `lib/domain` as the inner policy layer and `lib/infrastructure` as the
+Treat `domain` as the inner policy layer and `infrastructure` as the
 outer integration layer. The composition root (`src/main.tsx`) is the only
 module allowed to import across all layers to wire them together.
 
@@ -28,10 +28,10 @@ module allowed to import across all layers to wire them together.
 
 Every outbound dependency crosses a port:
 
-- persistence → a repository port in `lib/domain/repositories/`, implemented in
-  `lib/infrastructure/data/`
-- auth, clock, id generation, notification → a port in `lib/domain/ports/`,
-  implemented in `lib/infrastructure/`
+- persistence → a repository port in `domain/repositories/`, implemented in
+  `infrastructure/data/`
+- auth, clock, id generation, notification → a port in `domain/ports/`,
+  implemented in `infrastructure/`
 
 Use cases and domain depend on the port type. They must never import
 `RayfinClient`, `client.data`, or an auth SDK. The adapter depends on the port
@@ -49,11 +49,15 @@ Use this decision order:
 3. Promote a type into `domain/models` only when it is a real business concept
    with invariants.
 4. If contracts become broadly shared across many boundaries, introduce a
-   dedicated `src/lib/contracts/` directory later instead of polluting
+   dedicated `src/contracts/` directory later instead of polluting
    `domain`.
 
 The Rayfin `@entity` classes in `rayfin/data` are platform schema, not domain
-contracts. Never import them into `lib/domain`.
+contracts. Never import their **values** (the decorated classes) into `domain`.
+A **type-only** reference to an entity's instance shape (`import type { Account }
+from '.../rayfin/data/Account'`, e.g. via a `domain/types` barrel) is allowed: it
+carries no runtime, decorator, or SDK dependency, and is often the most
+type-safe source of a record's persisted shape.
 
 ## Constant Placement Rule
 
@@ -76,11 +80,11 @@ Validate at the narrowest boundary that can correctly own the rule.
 
 Use this split:
 
-- adapters (`lib/infrastructure`): shape of Rayfin query results, env values,
+- adapters (`infrastructure`): shape of Rayfin query results, env values,
   and browser inputs crossing into the app; treat them as `unknown` first
-- use cases (`lib/usecase`): permission intent, workflow preconditions,
+- use cases (`usecase`): permission intent, workflow preconditions,
   cross-field application rules
-- domain (`lib/domain`): business invariants that must always hold
+- domain (`domain`): business invariants that must always hold
 
 Do not push domain invariants outward just because the UI can reject early, and
 do not pull Rayfin-specific parsing into `domain`.
@@ -133,9 +137,9 @@ objects into use cases and components.
 
 Treat these as architecture failures:
 
-- `components`, `pages`, `lib/usecase`, or `lib/domain` importing
+- `components`, `pages`, `usecase`, or `domain` importing
   `@microsoft/rayfin-client`, `client.data`, or an auth SDK
-- `lib/domain` importing React, `react-router-dom`, browser APIs, or the
+- `domain` importing React, `react-router-dom`, browser APIs, or the
   `rayfin/data` entities
 - `components/shared` importing feature-specific use cases
 - a use case constructing its own repository or auth service with `new`

@@ -22,7 +22,7 @@ pages/components ──▶ use case ──▶ port (domain)
 inner module has to construct its own dependencies.
 
 **Where.** `src/main.tsx`, using factories from
-`src/lib/infrastructure/config/`.
+`src/infrastructure/config/`.
 
 ```tsx
 // src/main.tsx
@@ -40,7 +40,7 @@ createRoot(document.getElementById("root")!).render(
 
 **Anti-patterns.** Building the client or repositories inside a component, a
 use case, or a module singleton; reading `import.meta.env` outside
-`lib/infrastructure/config/`.
+`infrastructure/config/`.
 
 ## 2. Dependency Injection
 
@@ -58,16 +58,68 @@ export function useTodo(deps: { todos: TodoRepository }) { /* ... */ }
 **Anti-patterns.** Service locators; `new SomeRepository()` inside a use case;
 importing `getRayfinClient()` across the app instead of injecting a facade.
 
+### Dependency Context (how use cases receive ports)
+
+Provide the assembled `AppDependencies` to the React tree through **one**
+Context, and read it in use cases with a `useDependencies()` hook. This is the
+concrete home of "inject ports through one Context", and it lives in `src/di/`.
+
+```ts
+// src/di/dependencies.ts
+export interface AppDependencies {
+  accounts: AccountRepository;
+  audit: AuditLog;
+  // add a port here as each feature migrates onto the layered architecture
+}
+```
+
+```tsx
+// src/di/DependenciesProvider.tsx
+const DependenciesContext = createContext<AppDependencies | null>(null);
+
+export function DependenciesProvider({ deps, children }: {
+  deps: AppDependencies;
+  children: ReactNode;
+}) {
+  return (
+    <DependenciesContext.Provider value={deps}>
+      {children}
+    </DependenciesContext.Provider>
+  );
+}
+
+export function useDependencies(): AppDependencies {
+  const deps = useContext(DependenciesContext);
+  if (!deps) {
+    throw new Error('useDependencies must be used within a DependenciesProvider');
+  }
+  return deps;
+}
+```
+
+```ts
+// a use case reads its ports from the context
+export function useAccounts() {
+  const { accounts, audit } = useDependencies();
+  // ...
+}
+```
+
+The composition root builds `AppDependencies` and wraps the app in
+`DependenciesProvider`; nothing below constructs its own ports. Live user
+context (the current actor) is NOT stored in this graph — read it from the auth
+context inside the use case and pass it explicitly per call.
+
 ## 3. Ports And Adapters (Hexagonal)
 
 **Intent.** Invert dependencies so the app owns the interfaces and the Rayfin
 SDK sits behind them.
 
-**Where.** Ports in `src/lib/domain/` (`repositories/`, `ports/`); adapters in
-`src/lib/infrastructure/`.
+**Where.** Ports in `src/domain/` (`repositories/`, `ports/`); adapters in
+`src/infrastructure/`.
 
 ```ts
-// src/lib/domain/ports/auth-service.ts  (port)
+// src/domain/ports/auth-service.ts  (port)
 export interface AuthService {
   getCurrentUser(): Promise<AuthUser | null>;
   signIn(): Promise<AuthUser>;
@@ -76,7 +128,7 @@ export interface AuthService {
 ```
 
 ```ts
-// src/lib/infrastructure/auth/rayfin-auth-service.ts  (adapter)
+// src/infrastructure/auth/rayfin-auth-service.ts  (adapter)
 export class RayfinAuthService implements AuthService { /* uses RayfinClient */ }
 ```
 
@@ -88,12 +140,12 @@ leaks `client.data` types or the query DSL into its signature.
 **Intent.** Give the app a persistence-shaped interface in domain terms, and
 keep the typed `client.data.<Entity>` calls in one place.
 
-**Where.** Port in `src/lib/domain/repositories/`; implementation in
-`src/lib/infrastructure/data/`. Full rules in
+**Where.** Port in `src/domain/repositories/`; implementation in
+`src/infrastructure/data/`. Full rules in
 [`rayfin-data-access.md`](rayfin-data-access.md).
 
 ```ts
-// src/lib/domain/repositories/todo-repository.ts  (port)
+// src/domain/repositories/todo-repository.ts  (port)
 export interface TodoRepository {
   list(): Promise<Todo[]>;
   create(input: NewTodo): Promise<Todo>;
@@ -103,7 +155,7 @@ export interface TodoRepository {
 ```
 
 ```ts
-// src/lib/infrastructure/data/rayfin-todo-repository.ts  (adapter)
+// src/infrastructure/data/rayfin-todo-repository.ts  (adapter)
 export class RayfinTodoRepository implements TodoRepository {
   constructor(private readonly client: RayfinClientFacade) {}
   async list(): Promise<Todo[]> {
@@ -124,11 +176,11 @@ raw Rayfin entity objects across the boundary; hand-writing `fetch`/GraphQL.
 **Intent.** Swap an implementation by environment or context without changing
 callers.
 
-**Where.** Alternative adapters in `src/lib/infrastructure/`, chosen in the
+**Where.** Alternative adapters in `src/infrastructure/`, chosen in the
 composition root.
 
 ```ts
-// src/lib/infrastructure/config/create-auth-service.ts
+// src/infrastructure/config/create-auth-service.ts
 export function createAuthService(client: RayfinClientFacade, config: Config): AuthService {
   return config.localDev
     ? new MockAuthService(client)      // local email/password
@@ -140,17 +192,17 @@ Use the same shape for data (an in-memory repository for local dev vs a
 Rayfin-backed repository). Both implement the same port.
 
 **Anti-patterns.** `if (localDev)` branches scattered through use cases or
-components; environment checks outside `lib/infrastructure/config/`.
+components; environment checks outside `infrastructure/config/`.
 
 ## 6. Facade
 
 **Intent.** Expose a small, stable surface over the `RayfinClient` so the rest
 of infrastructure depends on a narrow contract.
 
-**Where.** `src/lib/infrastructure/rayfin/`.
+**Where.** `src/infrastructure/rayfin/`.
 
 ```ts
-// src/lib/infrastructure/rayfin/client.ts
+// src/infrastructure/rayfin/client.ts
 export interface RayfinClientFacade {
   readonly data: RayfinClient<TodoAppSchema>["data"];
   getSession(): RayfinSession;
@@ -158,14 +210,14 @@ export interface RayfinClientFacade {
 ```
 
 **Anti-patterns.** Passing the full `RayfinClient` everywhere; importing
-`@microsoft/rayfin-client` outside `lib/infrastructure/`.
+`@microsoft/rayfin-client` outside `infrastructure/`.
 
 ## 7. Presenter / View Model
 
 **Intent.** Keep components render-only by producing view-ready props in the
 use case.
 
-**Where.** `src/lib/usecase/<feature>/` (selectors + the `use-<feature>` Hook);
+**Where.** `src/usecase/<feature>/` (selectors + the `use-<feature>` Hook);
 consumed by `src/components/<feature>/`.
 
 ```ts
@@ -185,7 +237,7 @@ sorting inline; passing raw repository results into deep component trees.
 **Intent.** Model async interaction phases explicitly instead of scattering
 boolean flags.
 
-**Where.** `src/lib/usecase/<feature>/reducer.ts` + `state.ts`.
+**Where.** `src/usecase/<feature>/reducer.ts` + `state.ts`.
 
 ```text
 idle -> loading -> ready
@@ -204,7 +256,7 @@ contradict; reducers that call repositories or mutate external state.
 
 **Intent.** Encapsulate multi-step assembly of adapters and inject the result.
 
-**Where.** `src/lib/infrastructure/config/` (`create-rayfin-client.ts`,
+**Where.** `src/infrastructure/config/` (`create-rayfin-client.ts`,
 `create-auth-service.ts`, `create-repositories.ts`).
 
 ```ts
@@ -221,7 +273,7 @@ tangle; factories that read env directly instead of receiving validated config.
 **Intent.** Translate Rayfin entity shapes and Fabric `claims` into the app's
 domain/view terms at the boundary, so Rayfin's model never leaks inward.
 
-**Where.** `src/lib/infrastructure/data/` (next to the repository that uses it).
+**Where.** `src/infrastructure/data/` (next to the repository that uses it).
 
 ```ts
 // map a Rayfin Todo row (DTO) into the domain/view model

@@ -63,7 +63,7 @@ Inside a component file, keep this order:
 
 Do not let a component file own:
 
-- async orchestration → put it in `src/lib/usecase/<feature>/`
+- async orchestration → put it in `src/usecase/<feature>/`
 - reducer logic → same
 - data access → a repository port called from the use case; never `client.data`
   or `RayfinClient` in a component

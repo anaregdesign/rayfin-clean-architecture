@@ -21,12 +21,12 @@ SDK directly.
 
 ## Where To Put It
 
-Use a feature directory under `src/lib/usecase/`.
+Use a feature directory under `src/usecase/`.
 
 Preferred shape:
 
 ```text
-src/lib/usecase/generation-session/
+src/usecase/generation-session/
   use-generation-session.ts
   controller.ts
   store.ts

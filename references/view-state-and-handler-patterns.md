@@ -17,7 +17,7 @@ For a single boolean toggle, keep state in the component.
 For a feature `todo`:
 
 ```text
-src/lib/usecase/todo/
+src/usecase/todo/
   use-todo.ts
   state.ts
   reducer.ts

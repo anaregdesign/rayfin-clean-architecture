@@ -20,11 +20,12 @@ changes never checked in a real rendered browser flow are not done.
 Confirm all of the following:
 
 - no `@microsoft/rayfin-client`, `RayfinClient`, or `client.data` import outside
-  `src/lib/infrastructure/`
-- no auth SDK import outside `src/lib/infrastructure/auth/` (and the client
+  `src/infrastructure/`
+- no auth SDK import outside `src/infrastructure/auth/` (and the client
   facade)
-- no React, `react-router-dom`, or browser API import inside `src/lib/domain/*`
-- no `rayfin/data` entity import inside `src/lib/domain/*`
+- no React, `react-router-dom`, or browser API import inside `src/domain/*`
+- no `rayfin/data` entity **value** import inside `src/domain/*` (a type-only
+  shape reference is allowed)
 - no repository or auth service reached from a component/page without going
   through a use case and port
 - no generic catch-all common directory reintroduced
@@ -40,9 +41,9 @@ Confirm all of the following:
   with `new`
 - no service locator or module-level mutable singleton carrying Fabric session
   or user context
-- no `import.meta.env` read outside `src/lib/infrastructure/config/`
+- no `import.meta.env` read outside `src/infrastructure/config/`
 - no `if (localDev)` / environment branch outside
-  `src/lib/infrastructure/config/`
+  `src/infrastructure/config/`
 - no circular imports across page, use case, or infrastructure boundaries
 - no authorization rule that exists only in the UI with no reliance on `@role`
 - no Rayfin entity object or `Date` leaking into domain rules unchanged
@@ -73,17 +74,17 @@ Confirm all of the following:
 Use `rg` for quick audits from the app root:
 
 ```bash
-# Rayfin SDK / data client must stay inside lib/infrastructure
-rg -n "@microsoft/rayfin-client|client\.data|RayfinClient" src/pages src/components src/lib/usecase src/lib/domain
+# Rayfin SDK / data client must stay inside infrastructure
+rg -n "@microsoft/rayfin-client|client\.data|RayfinClient" src/pages src/components src/usecase src/domain
 
 # Domain must be free of React, router, browser, and rayfin/data entities
-rg -n "from ['\"][^'\"]*(react|react-router|rayfin/data)" src/lib/domain
+rg -n "from ['\"][^'\"]*(react|react-router|rayfin/data)" src/domain
 
 # env only in config
-rg -n "import\.meta\.env" src --glob '!src/lib/infrastructure/config/**'
+rg -n "import\.meta\.env" src --glob '!src/infrastructure/config/**'
 
 # no new use of new Repository/Service in usecase/domain
-rg -n "new [A-Z][A-Za-z0-9_]*(Repository|Service)\(" src/lib/usecase src/lib/domain
+rg -n "new [A-Z][A-Za-z0-9_]*(Repository|Service)\(" src/usecase src/domain
 
 # convenience buckets and horizontal dirs
 find src -type d \( -name features -o -name modules -o -name hooks -o -name services -o -name utils -o -name types -o -name store \) | sort
@@ -114,7 +115,7 @@ Before considering the change complete, be able to state all of the following:
 - `components/shared` stays presentational and feature-agnostic
 - reducer and state modules live with their owning feature use case
 - all data access goes through a repository port; `client.data` stays inside
-  `src/lib/infrastructure/data/`
+  `src/infrastructure/data/`
 - ports live in `domain`; adapters live in `infrastructure`; nothing inner
   imports the Rayfin SDK
 - dependencies are assembled in the composition root and injected, not

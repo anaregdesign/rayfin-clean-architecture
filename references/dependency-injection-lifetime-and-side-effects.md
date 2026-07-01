@@ -9,7 +9,7 @@ Assemble the whole dependency graph in one place: `src/main.tsx`.
 
 The composition root:
 
-1. reads and validates configuration through `lib/infrastructure/config/`
+1. reads and validates configuration through `infrastructure/config/`
 2. builds the `RayfinClient` (facade) once
 3. selects the concrete adapters (auth service, repositories) — the Strategy
    choice, e.g. mock vs Fabric based on the API URL
@@ -27,7 +27,7 @@ Prefer:
 
 - constructor injection for adapter classes (repositories, auth services)
 - explicit function parameters for stateless helpers
-- factory functions in `lib/infrastructure/config/` for assembly
+- factory functions in `infrastructure/config/` for assembly
 - React Context to pass already-built dependencies to the view, and Hook
   arguments to pass them to use cases
 
@@ -36,7 +36,7 @@ Avoid:
 - service locators that hide what a use case depends on
 - module-level mutable singletons that carry Fabric session or user state
 - direct imports of `RayfinClient`, `client.data`, or a concrete repository
-  inside `lib/usecase` or `lib/domain`
+  inside `usecase` or `domain`
 - calling `new SomeRepository()` inside a use case or component
 
 Introduce a DI container only when wiring complexity truly justifies it; manual
@@ -47,7 +47,7 @@ factories are the default.
 The `RayfinClient` is an expensive, stateless-per-user client. Build it once in
 the composition root and share it by injection.
 
-- construct it in `lib/infrastructure/rayfin/` and hand it to the factories
+- construct it in `infrastructure/rayfin/` and hand it to the factories
 - do not construct a second client per feature or per component
 - if the template exposes a module-level `initRayfinClient()` / `getRayfinClient()`
   pair, treat those as an infrastructure detail wrapped by the facade, and still
@@ -61,7 +61,16 @@ Use these rules:
 
 - avoid module-level mutable state read or written across unrelated flows
 - keep Fabric session, user context, and correlation metadata passed
-  explicitly per call rather than stored in a global
+  explicitly per call rather than stored in a global. In a use case, read the
+  current actor from the auth context and pass it into writes and ports — never
+  from a module-global holder:
+
+  ```ts
+  const { user } = useAuth();
+  const actor = user?.email ?? user?.name ?? user?.id ?? 'system';
+  await accounts.create({ ...fields, createdBy: actor, updatedBy: actor });
+  await audit.record({ ...entry, actor });
+  ```
 - re-read the current session from the injected auth service or client when an
   operation needs it, instead of caching it in a module variable
 - guard client-side concurrent flows against stale responses, such as multiple

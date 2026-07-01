@@ -14,14 +14,14 @@ All data access goes through a **repository port** (domain) implemented by a
 port, never on `client.data`.
 
 ```text
-use case ──▶ TodoRepository (port, lib/domain/repositories)
+use case ──▶ TodoRepository (port, domain/repositories)
                  ▲
                  │ implements
-     RayfinTodoRepository (adapter, lib/infrastructure/data) ──▶ client.data.Todo
+     RayfinTodoRepository (adapter, infrastructure/data) ──▶ client.data.Todo
 ```
 
 Never call `client.data.<Entity>`, `RayfinClient`, `fetch`, or hand-written
-GraphQL outside `src/lib/infrastructure/`.
+GraphQL outside `src/infrastructure/`.
 
 ## Port Shape
 
@@ -29,8 +29,8 @@ Define the port in domain terms — verbs the app understands, domain/view model
 in and out. Keep the Rayfin query DSL out of the signature.
 
 ```ts
-// src/lib/domain/repositories/todo-repository.ts
-import type { Todo, NewTodo } from "@/lib/domain/models/todo";
+// src/domain/repositories/todo-repository.ts
+import type { Todo, NewTodo } from "@/domain/models/todo";
 
 export interface TodoRepository {
   list(): Promise<Todo[]>;
@@ -47,10 +47,10 @@ Implement the port with the typed client. Keep query composition, session
 reads, ownership scoping, and mapping here.
 
 ```ts
-// src/lib/infrastructure/data/rayfin-todo-repository.ts
-import type { TodoRepository } from "@/lib/domain/repositories/todo-repository";
-import type { Todo, NewTodo } from "@/lib/domain/models/todo";
-import type { RayfinClientFacade } from "@/lib/infrastructure/rayfin/client";
+// src/infrastructure/data/rayfin-todo-repository.ts
+import type { TodoRepository } from "@/domain/repositories/todo-repository";
+import type { Todo, NewTodo } from "@/domain/models/todo";
+import type { RayfinClientFacade } from "@/infrastructure/rayfin/client";
 import { toTodo } from "./todo-mapper";
 
 export class RayfinTodoRepository implements TodoRepository {
@@ -122,7 +122,7 @@ Convert Rayfin rows and `claims` into domain/view models at the adapter
 boundary.
 
 ```ts
-// src/lib/infrastructure/data/todo-mapper.ts
+// src/infrastructure/data/todo-mapper.ts
 export const toTodo = (row: TodoRow): Todo => ({
   id: row.id,
   title: row.title,
@@ -143,7 +143,7 @@ a **Strategy**: a second repository implementation behind the same port,
 selected in the composition root.
 
 ```ts
-// src/lib/infrastructure/config/create-repositories.ts
+// src/infrastructure/config/create-repositories.ts
 export function createRepositories(client: RayfinClientFacade, config: Config) {
   const todos: TodoRepository = config.localDev
     ? new InMemoryTodoRepository()
@@ -170,5 +170,5 @@ keep the branch in the factory.
 - returning Rayfin entity objects across the use-case boundary
 - ownership scoping (`user_id`) applied in a component instead of the adapter
 - caching the session in a module-level variable
-- duplicating the entity decorator model inside `lib/domain` (it lives in
+- duplicating the entity decorator model inside `domain` (it lives in
   `rayfin/data`, owned by the `rayfin` skill)

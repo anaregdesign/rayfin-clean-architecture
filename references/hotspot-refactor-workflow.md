@@ -97,13 +97,13 @@ Prefer this extraction order:
 Choose target files based on responsibility:
 
 - render-only code → `src/components/<feature>/`
-- reducer, selectors, handlers → `src/lib/usecase/<feature>/`
+- reducer, selectors, handlers → `src/usecase/<feature>/`
 - data access via `client.data` → a repository adapter in
-  `src/lib/infrastructure/data/` behind a port in
-  `src/lib/domain/repositories/`
-- browser integrations → `src/lib/infrastructure/browser/`
-- Rayfin client wiring → `src/lib/infrastructure/rayfin/`
-- business invariants → `src/lib/domain/*`
+  `src/infrastructure/data/` behind a port in
+  `src/domain/repositories/`
+- browser integrations → `src/infrastructure/browser/`
+- Rayfin client wiring → `src/infrastructure/rayfin/`
+- business invariants → `src/domain/*`
 
 Define the smallest safe batch. A good batch removes one responsibility, keeps
 the old file compiling, and is reviewable without reading the whole system.

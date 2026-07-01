@@ -6,13 +6,17 @@ Rayfin `@entity` classes in `rayfin/data` are **persistence schema** owned by
 the platform: they carry DB/DAB decorators (`@uuid`, `@text`, `@role`, …) and
 are coupled to the database dialect. They are not domain models.
 
-The app's **domain models** live in `src/lib/domain/models/` and are the
+The app's **domain models** live in `src/domain/models/` and are the
 business/view types the app reasons about. They are free of decorators, the
 Rayfin SDK, React, and browser APIs. A repository adapter maps between a Rayfin
 entity row (a DTO) and a domain model when their shapes diverge.
 
-Do not import `rayfin/data` entities into `lib/domain`, and do not push DB or
-`@role` concerns into domain models.
+Do not import `rayfin/data` entity **values** (the decorated classes) into
+`domain`, and do not push DB or `@role` concerns into domain models. A
+**type-only** reference to an entity's instance shape (`import type { Account }
+from '.../rayfin/data/Account'`, e.g. re-exported through a `domain/types`
+barrel) is allowed — it carries no runtime, decorator, or SDK dependency and is
+often the most type-safe source of a record's persisted shape.
 
 ## Concept Ownership And Consolidation Rule
 
@@ -117,7 +121,7 @@ Best practice:
 
 Apply this specifically to:
 
-- `import.meta.env.VITE_*` values read in `lib/infrastructure/config/`
+- `import.meta.env.VITE_*` values read in `infrastructure/config/`
 - data crossing into the app from Rayfin query results before mapping
 - anything parsed from `localStorage`, URL params, or postMessage
 

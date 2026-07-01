@@ -13,15 +13,15 @@ never be violated.**
 
 1. **Obey the canonical `src/` layout and inward dependency direction.** Place
    every file in its canonical owner under `src/`, and keep dependencies
-   pointing strictly inward: `pages`/`components` → `lib/usecase` →
-   `lib/domain`; `lib/infrastructure` implements `lib/domain` ports.
-   Dependencies must never point outward, and `lib/domain` must never import
+   pointing strictly inward: `pages`/`components` → `usecase` →
+   `domain`; `infrastructure` implements `domain` ports.
+   Dependencies must never point outward, and `domain` must never import
    React, the Rayfin SDK, browser APIs, or the `rayfin/data` decorator models.
 2. **Reach the Rayfin SDK only through infrastructure ports.** Never call
    `client.data.<Entity>`, `RayfinClient`, or an auth SDK from `pages`,
-   `components`, `lib/usecase`, or `lib/domain`. Data and auth flow through a
-   port defined in `lib/domain` and an adapter implemented in
-   `lib/infrastructure/`. This is the Repository + Ports-and-Adapters rule.
+   `components`, `usecase`, or `domain`. Data and auth flow through a
+   port defined in `domain` and an adapter implemented in
+   `infrastructure/`. This is the Repository + Ports-and-Adapters rule.
 3. **Assemble dependencies once in the composition root and inject them.**
    `src/main.tsx` is the composition root: read config, build the RayfinClient,
    pick the concrete adapters, and inject them through constructors, function
@@ -85,32 +85,40 @@ src/
   components/
     <feature>/                  # Feature-local presentational components
     shared/                     # Feature-agnostic presentational primitives
-  lib/
-    usecase/
-      <feature>/
-        use-<feature>.ts        # public Hook / controller entry point
-        state.ts reducer.ts selectors.ts handlers.ts types.ts
-      auth/
-        use-auth.ts
-        AuthContext.tsx         # view-facing auth context (service is injected)
-    domain/
-      models/                   # business/view models (NOT the @entity classes)
-      value-objects/
-      policies/
-      services/                 # infrastructure-free domain orchestration (rare)
-      repositories/             # persistence ports (interfaces)
-      ports/                    # other outbound ports (auth, clock, notifier)
-    infrastructure/
-      rayfin/                   # RayfinClient facade + singleton + schema binding
-      data/                     # repository implementations wrapping client.data.<Entity>
-      auth/                     # auth-service implementations (mock vs Fabric)
-      browser/                  # localStorage, clipboard, media-query adapters
-      config/                   # import.meta.env readers + dependency factories
+  usecase/
+    <feature>/
+      use-<feature>.ts          # public Hook / controller entry point
+      state.ts reducer.ts selectors.ts handlers.ts types.ts
+    auth/
+      use-auth.ts
+      AuthContext.tsx           # view-facing auth context (service is injected)
+  domain/
+    models/                     # business/view models (NOT the @entity classes)
+    value-objects/
+    policies/
+    services/                   # infrastructure-free domain orchestration (rare)
+    repositories/               # persistence ports (interfaces)
+    ports/                      # other outbound ports (auth, clock, notifier)
+  infrastructure/
+    rayfin/                     # RayfinClient facade + schema binding
+    data/                       # repository implementations wrapping client.data.<Entity>
+    auth/                       # auth-service implementations (mock vs Fabric)
+    browser/                    # localStorage, clipboard, media-query adapters
+    config/                     # import.meta.env readers + dependency factories
+  di/                           # AppDependencies + DependenciesProvider/useDependencies
+  lib/                          # tiny shared utilities only (formatters, guards)
 
 rayfin/                         # PLATFORM — owned by the `rayfin` skill + MCP
   data/                         # @entity decorator models (persistence schema)
   rayfin.yml                    # Fabric service configuration
 ```
+
+The `@/` alias points at `src/`, so layers live **directly under `src/`**
+(`src/domain`, `src/usecase`, `src/infrastructure`, `src/di`, `src/components`,
+`src/pages`) — matching the Rayfin template's flat `src/<layer>` convention.
+`src/lib/` is reserved for tiny shared utilities, not a layer prefix. Match the
+project's existing root and never create a parallel tree such as `src/lib/domain`
+when `src/domain` already exists.
 
 The Placement Guide below maps each need to its location, and
 [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
@@ -153,15 +161,15 @@ reference that owns the full detail; load that reference for a matching change.
 - Lock file placement before coding: name exact target paths first, then
   implement. If a file does not fit the Canonical Layout, revise the plan
   instead of inventing a convenience directory.
-- Keep dependency direction inward: `pages`/`components` → `lib/usecase` →
-  `lib/domain`; `lib/infrastructure` implements `lib/domain` ports;
-  `lib/domain` depends only on `lib/domain`.
+- Keep dependency direction inward: `pages`/`components` → `usecase` →
+  `domain`; `infrastructure` implements `domain` ports;
+  `domain` depends only on `domain`.
 - Keep feature-local components in `src/components/<feature>/` and promote to
   `src/components/shared/` only when feature-agnostic. Do not add generic
   buckets (`src/hooks/`, `src/services/`, `src/utils/`, `src/types/`,
   `src/store/`) or horizontal `state`/`reducers`/`handlers` directories. The
   Rayfin template's flat `services/` and `hooks/` map onto
-  `lib/infrastructure/` and `lib/usecase/` respectively.
+  `infrastructure/` and `usecase/` respectively.
 - See
   [`references/layout-and-module-placement.md`](references/layout-and-module-placement.md)
   and
@@ -169,18 +177,18 @@ reference that owns the full detail; load that reference for a matching change.
 
 ### Design patterns, boundaries, and dependency injection
 
-- Model outbound needs as **ports** in `lib/domain` (repository ports,
-  auth/clock/notifier ports) and their **adapters** in `lib/infrastructure`.
+- Model outbound needs as **ports** in `domain` (repository ports,
+  auth/clock/notifier ports) and their **adapters** in `infrastructure`.
   Use cases and domain depend on ports, never on `RayfinClient` or
   `client.data`.
 - Use the **Repository** pattern for all data access: the port lives in
-  `lib/domain/repositories/`, and the Rayfin-backed implementation in
-  `lib/infrastructure/data/` uses the typed `client.data.<Entity>` internally.
+  `domain/repositories/`, and the Rayfin-backed implementation in
+  `infrastructure/data/` uses the typed `client.data.<Entity>` internally.
 - Use **Strategy** to swap implementations by environment (e.g. an in-memory
   repository or mock auth service for local dev vs the Rayfin-backed ones),
   and choose the strategy in the composition root.
 - Assemble everything in the **Composition Root** (`src/main.tsx`) with
-  explicit **Factory** functions in `lib/infrastructure/config/`. Inject by
+  explicit **Factory** functions in `infrastructure/config/`. Inject by
   constructor, parameter, props, or one Context. Never use a service locator
   or a stateful module singleton.
 - Keep authorization intent explicit in use cases/policies even though Rayfin
@@ -195,7 +203,7 @@ reference that owns the full detail; load that reference for a matching change.
 ### Rayfin data access
 
 - Never call `client.data.<Entity>` or hand-write GraphQL/`fetch` outside
-  `lib/infrastructure/`. Go through a repository port.
+  `infrastructure/`. Go through a repository port.
 - Return domain/view models from repositories. Map the Rayfin entity/query
   shape to the domain shape only when they genuinely diverge; for simple
   screens the query DTO may be the view model directly — do not over-map.
@@ -222,7 +230,7 @@ reference that owns the full detail; load that reference for a matching change.
 ### Client state and components
 
 - Keep async state, mutation handlers, and derived view models in
-  `src/lib/usecase/`, with `state`/`reducer`/`selectors`/`handlers` colocated
+  `src/usecase/`, with `state`/`reducer`/`selectors`/`handlers` colocated
   in the owning feature directory. Keep components presentational with only
   ephemeral UI state.
 - Expose data to the view through use-case Hooks that call repository ports;
@@ -253,8 +261,9 @@ reference that owns the full detail; load that reference for a matching change.
   and view models.
 - Treat untrusted data as `unknown` at the boundary and narrow it immediately —
   including Rayfin query results promoted into domain shapes and
-  `import.meta.env` values. Keep the `rayfin/data` decorator entities out of
-  `lib/domain`; domain models are separate business/view types.
+  `import.meta.env` values. Keep the `rayfin/data` decorator entity **values**
+  out of `domain`; domain models are separate business/view types, though a
+  **type-only** reference to an entity's instance shape is allowed.
 - See
   [`references/domain-modeling-and-type-rules.md`](references/domain-modeling-and-type-rules.md).
 
@@ -286,10 +295,10 @@ reference that owns the full detail; load that reference for a matching change.
   - route composition and page containers: `src/App.tsx`, `src/pages/`
   - feature-local presentational UI: `src/components/<feature>/`
   - shared presentational UI: `src/components/shared/`
-  - client orchestration and state: `src/lib/usecase/<feature>/`
-  - domain concepts and ports: `src/lib/domain/`
+  - client orchestration and state: `src/usecase/<feature>/`
+  - domain concepts and ports: `src/domain/`
   - Rayfin/browser adapters and repository implementations:
-    `src/lib/infrastructure/`
+    `src/infrastructure/`
   - platform data model / config: `rayfin/` (**defer to the `rayfin` skill**)
 - If any planned file lacks a clear owner, fix the placement plan before
   implementing.
@@ -318,7 +327,7 @@ reference that owns the full detail; load that reference for a matching change.
 
 ### 2. Keep view logic out of components
 
-- Build a Hook or controller in `src/lib/usecase/<feature>/` for each
+- Build a Hook or controller in `src/usecase/<feature>/` for each
   non-trivial screen or interaction flow; give it a feature directory when it
   needs submodules.
 - Keep feature-specific presentational components in
@@ -338,7 +347,7 @@ reference that owns the full detail; load that reference for a matching change.
 ### 4. Access data through repository ports
 
 - The use case calls a repository port; the port is implemented in
-  `lib/infrastructure/data/` using `client.data.<Entity>`.
+  `infrastructure/data/` using `client.data.<Entity>`.
 - Return domain/view models from the repository; scope by `user_id` /
   `claims.sub` and read the Fabric session inside the adapter.
 - Do not expect Rayfin entity instance identity to survive across the client
@@ -347,7 +356,7 @@ reference that owns the full detail; load that reference for a matching change.
 ### 5. Assemble dependencies at the edge
 
 - Build the RayfinClient, repositories, and auth service in the composition
-  root (`src/main.tsx`) using factory functions in `lib/infrastructure/config/`.
+  root (`src/main.tsx`) using factory functions in `infrastructure/config/`.
 - Inject them through constructors, props, or one Context. Prefer manual DI
   with explicit factories before any DI container.
 - Recreate request-scoped dependencies from the current Fabric session/context
@@ -356,8 +365,8 @@ reference that owns the full detail; load that reference for a matching change.
 ### 6. Validate and map errors by layer
 
 - Validate transport/parse shape at the adapter boundary (including Rayfin
-  results and env), use-case rules in `lib/usecase`, and invariants in
-  `lib/domain`.
+  results and env), use-case rules in `usecase`, and invariants in
+  `domain`.
 - Map Rayfin/network and domain errors to view-facing states in the use case,
   not inside components.
 
@@ -379,7 +388,7 @@ reference that owns the full detail; load that reference for a matching change.
 ### 9. Use explicit compromises for stateful flows
 
 - For streaming, session, playback, or wizard-style flows, allow a
-  feature-local controller or store inside `src/lib/usecase/<feature>/` when
+  feature-local controller or store inside `src/usecase/<feature>/` when
   lifecycle and identity genuinely matter.
 - Split durable state, ephemeral runtime state, and infrastructure handles
   explicitly. See
@@ -420,22 +429,24 @@ reference that owns the full detail; load that reference for a matching change.
 - Need route composition or an auth gate: `src/App.tsx`
 - Need a per-screen route container: `src/pages/<Feature>Page.tsx`
 - Need client-side state, handlers, reducers, selectors, or orchestration:
-  `src/lib/usecase/<feature>/`
-- Need view-facing auth state: `src/lib/usecase/auth/`
-- Need a business invariant or behavior-rich model: `src/lib/domain/models/`
+  `src/usecase/<feature>/`
+- Need view-facing auth state: `src/usecase/auth/`
+- Need a business invariant or behavior-rich model: `src/domain/models/`
 - Need a small immutable business concept with validation:
-  `src/lib/domain/value-objects/`
-- Need cross-entity business rules: `src/lib/domain/policies/`
-- Need a persistence port: `src/lib/domain/repositories/`
-- Need another outbound port (auth, clock, notifier): `src/lib/domain/ports/`
+  `src/domain/value-objects/`
+- Need cross-entity business rules: `src/domain/policies/`
+- Need a persistence port: `src/domain/repositories/`
+- Need another outbound port (auth, clock, notifier): `src/domain/ports/`
 - Need a Rayfin client facade or schema binding:
-  `src/lib/infrastructure/rayfin/`
+  `src/infrastructure/rayfin/`
 - Need a repository implementation over `client.data.<Entity>`:
-  `src/lib/infrastructure/data/`
-- Need an auth-service implementation: `src/lib/infrastructure/auth/`
+  `src/infrastructure/data/`
+- Need an auth-service implementation: `src/infrastructure/auth/`
 - Need a browser adapter (storage, clipboard, media query):
-  `src/lib/infrastructure/browser/`
-- Need env reading or a dependency factory: `src/lib/infrastructure/config/`
+  `src/infrastructure/browser/`
+- Need env reading or a dependency factory: `src/infrastructure/config/`
+- Need the injected dependency graph or its React provider/hook: `src/di/`
+  (`AppDependencies`, `DependenciesProvider`, `useDependencies`)
 - Need a data-model entity, `@role`, `rayfin.yml`, CLI, or deployment:
   `rayfin/` — **defer to the `rayfin` skill and its MCP tools**
 - Need a reusable type or utility: place it with the owning use case or domain

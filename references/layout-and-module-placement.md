@@ -8,8 +8,14 @@ every file in its canonical owner under `src/`, and organize directories by
 responsibility, not by team preference or historical drift.
 
 The app root is `src/` (the Rayfin template convention, aliased as `@/*`), not
-`app/`. There is no server layer: the backend is the Rayfin/Fabric platform,
-reached only through `src/lib/infrastructure/`.
+`app/`. Because `@/*` points at `src/*`, the layers live **directly under
+`src/`** — `src/domain`, `src/usecase`, `src/infrastructure`, `src/di`,
+`src/components`, `src/pages` — matching the template's flat `src/<layer>`
+convention. `src/lib/` is reserved for tiny shared utilities, not a layer
+prefix; never create a parallel tree such as `src/lib/domain` when `src/domain`
+is the root, and keep every import path consistent with the alias
+(`@/domain/...`, not `@/lib/domain/...`). There is no server layer: the backend
+is the Rayfin/Fabric platform, reached only through `src/infrastructure/`.
 
 ## Mandatory Placement Preflight
 
@@ -32,20 +38,44 @@ layout drift unless an explicit migration plan says otherwise.
 The `npm create @microsoft/rayfin` template ships a flat starter structure.
 Map it onto the clean layers as you grow the app:
 
-- template `src/services/rayfinClient.ts` → `src/lib/infrastructure/rayfin/`
+- template `src/services/rayfinClient.ts` → `src/infrastructure/rayfin/`
 - template `src/services/*AuthService.ts` (+ `IAuthService`) →
-  auth port in `src/lib/domain/ports/` + implementations in
-  `src/lib/infrastructure/auth/`
+  auth port in `src/domain/ports/` + implementations in
+  `src/infrastructure/auth/`
 - template `src/services/todos.ts` → repository port in
-  `src/lib/domain/repositories/` + implementation in
-  `src/lib/infrastructure/data/`
+  `src/domain/repositories/` + implementation in
+  `src/infrastructure/data/`
 - template `src/services/bootstrap.ts` → composition root in `src/main.tsx`
-  plus factories in `src/lib/infrastructure/config/`
-- template `src/hooks/AuthContext.tsx` → `src/lib/usecase/auth/`
+  plus factories in `src/infrastructure/config/`
+- template `src/hooks/AuthContext.tsx` → `src/usecase/auth/`
 - template `src/pages/`, `src/components/` → unchanged in spirit, kept thin
 
 The platform files under `rayfin/` (`data/*.ts` entities, `rayfin.yml`) stay
 where they are and are owned by the `rayfin` skill, not this one.
+
+### Staged Migration Of An Existing App
+
+An app that grew without this skill (flat `src/services/`, `src/hooks/`, and a
+`getRayfinClient()` service-locator) migrates one feature at a time — you do not
+rewrite it all at once:
+
+1. Keep `bootstrapAuth()` / `initRayfinClient()` as-is. In `src/main.tsx`, after
+   auth is bootstrapped, build the dependency graph from the **same** client
+   (`createDependencies(getRayfinClient())`) and wrap the tree in
+   `DependenciesProvider`. Reuse the one client — do not initialize a second.
+2. Migrate a single feature: extract its repository port + Rayfin adapter, move
+   its orchestration into a `usecase` Hook, and rewire that feature's page onto
+   the Hook.
+3. Leave the legacy `services/*.ts` in place for features not yet migrated; keep
+   them compiling by re-exporting any moved concepts (e.g. `accountName`,
+   `AccountInput`) from their new `domain/` home.
+4. Replace module-global request/user state (e.g. a `session.ts` `actor`) with
+   context passed explicitly — read the actor from the auth context in the use
+   case and pass it into writes and the audit port.
+5. Repeat feature by feature; delete a legacy service only when its last
+   consumer has migrated.
+
+Keep the build green (`tsc -b`, tests, lint) after each feature.
 
 ## Feature Presentational Component Placement
 
@@ -72,12 +102,12 @@ product vocabulary.
 ## State Module Placement
 
 For non-trivial client interaction flows, create a feature directory under
-`src/lib/usecase/` and colocate the state modules there.
+`src/usecase/` and colocate the state modules there.
 
 Preferred shape:
 
 ```text
-src/lib/usecase/todo/
+src/usecase/todo/
   use-todo.ts
   state.ts
   reducer.ts
@@ -96,20 +126,21 @@ Use these files by responsibility:
 - `use-<feature>.ts`: public Hook or controller entry point
 
 Do not create horizontal buckets such as `src/state/`, `src/reducers/`,
-`src/stores/`, `src/handlers/`, or `src/lib/usecase/state/`.
+`src/stores/`, `src/handlers/`, or `src/usecase/state/`.
 
 ## Domain And Infrastructure Placement
 
-- Ports (interfaces the app depends on) live in `src/lib/domain/`:
+- Ports (interfaces the app depends on) live in `src/domain/`:
   persistence ports in `repositories/`, other outbound ports (auth, clock,
   notifier) in `ports/`.
-- Adapters (concrete implementations) live in `src/lib/infrastructure/`:
+- Adapters (concrete implementations) live in `src/infrastructure/`:
   the RayfinClient facade in `rayfin/`, repository implementations in `data/`,
   auth-service implementations in `auth/`, browser adapters in `browser/`, env
   readers and factories in `config/`.
-- Domain models, value objects, and policies live in `src/lib/domain/` and
-  never import React, the Rayfin SDK, browser APIs, or the `rayfin/data`
-  decorator entities.
+- Domain models, value objects, and policies live in `src/domain/` and never
+  import React, the Rayfin SDK, browser APIs, or the `rayfin/data` decorator
+  entity **values**; a type-only reference to an entity's instance shape is
+  allowed.
 
 ## No Generic Common Bucket
 
@@ -128,7 +159,7 @@ internals.
 
 Prefer:
 
-- `lib/usecase/<feature>/use-<feature>.ts` as the public use-case entry
+- `usecase/<feature>/use-<feature>.ts` as the public use-case entry
 - one primary port or adapter module as the public data entry
 
 Avoid importing another feature's private files such as `reducer.ts`,
@@ -189,12 +220,12 @@ Use `index.ts` only when it is a deliberate public entry point.
 For creating a todo:
 
 1. `App.tsx` mounts a route to a thin `src/pages/TodoPage.tsx`.
-2. A client use-case Hook (`src/lib/usecase/todo/use-todo.ts`) owns the draft
+2. A client use-case Hook (`src/usecase/todo/use-todo.ts`) owns the draft
    state and handlers.
 3. A presentational component (`src/components/todo/TodoComposer.tsx`) renders
    fields and calls passed handlers.
 4. The handler calls a repository port through the use case.
-5. The repository implementation (`src/lib/infrastructure/data/todo-repository.ts`)
+5. The repository implementation (`src/infrastructure/data/todo-repository.ts`)
    runs `client.data.Todo.create(...)` and maps the result to a view model.
 
 Each step should only depend on the next layer inward or on a port explicitly

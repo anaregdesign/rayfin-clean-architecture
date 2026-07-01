@@ -113,7 +113,7 @@ through desktop without forking the product into separate architectures.
 ## Architecture Placement
 
 - Put query-result-to-series mapping, filters, grouping, sorting, and drill
-  state in `src/lib/usecase/<feature>/`, and keep chart components focused on
+  state in `src/usecase/<feature>/`, and keep chart components focused on
   rendering, theming, and accessibility wiring. The data itself arrives through
   a repository port, never `client.data` in the component.
 - Keep shared chart shells, wrappers, and common chart primitives in
@@ -123,7 +123,7 @@ through desktop without forking the product into separate architectures.
   needs a reusable wrapper boundary.
 - Keep responsive layout behavior in Tailwind utilities on presentational
   components by default. Move viewport-aware state into
-  `src/lib/usecase/<feature>/` only when it affects interaction flow, data
+  `src/usecase/<feature>/` only when it affects interaction flow, data
   loading, or feature behavior rather than pure presentation.
 
 ## Verification

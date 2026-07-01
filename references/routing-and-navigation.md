@@ -35,7 +35,7 @@ export default function App() {
 
 `App.tsx` may define a small `AuthGuard` helper, but its exported top-level
 component is `App`. If the guard grows, move it to
-`src/lib/usecase/auth/` and keep `App.tsx` as composition only.
+`src/usecase/auth/` and keep `App.tsx` as composition only.
 
 ## Page Containers
 

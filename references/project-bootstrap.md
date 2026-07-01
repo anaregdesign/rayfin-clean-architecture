@@ -48,22 +48,22 @@ src/
   App.tsx                      # declarative routes + AuthGuard
   pages/
   components/<feature>/
-  lib/usecase/<feature>/
-  lib/domain/{models,repositories,ports}/
-  lib/infrastructure/{rayfin,data,auth,config}/
+  usecase/<feature>/
+  domain/{models,repositories,ports}/
+  infrastructure/{rayfin,data,auth,config}/
 ```
 
 Map the template's starter files onto the layers as described in
 [`layout-and-module-placement.md`](layout-and-module-placement.md): `services/`
-→ `lib/infrastructure/`, `hooks/` → `lib/usecase/`.
+→ `infrastructure/`, `hooks/` → `usecase/`.
 
 ## Wire The Composition Root First
 
 Before layering features, establish the dependency-injection spine:
 
-1. `lib/infrastructure/config/` reads and validates `import.meta.env.VITE_*`
-2. `lib/infrastructure/rayfin/` builds the `RayfinClient` facade
-3. `lib/infrastructure/config/` factories assemble the auth service and
+1. `infrastructure/config/` reads and validates `import.meta.env.VITE_*`
+2. `infrastructure/rayfin/` builds the `RayfinClient` facade
+3. `infrastructure/config/` factories assemble the auth service and
    repositories (Strategy: mock/local vs Fabric)
 4. `src/main.tsx` calls the factories and injects the result through providers
 
@@ -75,10 +75,10 @@ concrete from the first screen.
 
 For the first data-backed feature:
 
-- domain model in `lib/domain/models/`
-- repository port in `lib/domain/repositories/`
-- Rayfin adapter in `lib/infrastructure/data/` (uses `client.data.<Entity>`)
-- use-case Hook in `lib/usecase/<feature>/`
+- domain model in `domain/models/`
+- repository port in `domain/repositories/`
+- Rayfin adapter in `infrastructure/data/` (uses `client.data.<Entity>`)
+- use-case Hook in `usecase/<feature>/`
 - presentational components in `components/<feature>/`
 - a thin page container in `pages/` wired into `App.tsx`
 

@@ -8,7 +8,7 @@ files live and
 dependency direction these responsibilities must respect.
 
 There is no server layer in a Rayfin app: the backend is the managed
-Rayfin/Fabric platform, reached only through `src/lib/infrastructure/`.
+Rayfin/Fabric platform, reached only through `src/infrastructure/`.
 
 ## Presentation Layer
 
@@ -62,7 +62,7 @@ Do not import feature use cases, own feature vocabulary, or hide data access in
 
 ## Use Case Layer
 
-### `src/lib/usecase/`
+### `src/usecase/`
 
 - Own screen-level state and event handlers.
 - Assemble view models for components.
@@ -82,7 +82,7 @@ matter across multiple sibling views (see
 [`stateful-flow-compromises.md`](stateful-flow-compromises.md)). Do not default
 to a store when a Hook plus reducer is enough.
 
-### `src/lib/usecase/auth/`
+### `src/usecase/auth/`
 
 - Expose view-facing auth state (`user`, `isAuthenticated`, `signIn`,
   `signOut`) through a Hook and Context.
@@ -91,7 +91,7 @@ to a store when a Hook plus reducer is enough.
 
 ## Domain Layer
 
-### `src/lib/domain/models/`
+### `src/domain/models/`
 
 - Hold business/view concepts that enforce invariants or domain behavior.
 - Use `class` when identity or invariants matter; otherwise `type` plus
@@ -106,13 +106,13 @@ types. A repository maps between them when their shapes diverge.
 Do not place `CreateXInput`, `UpdateXPayload`, or `ListXResult` types here
 unless they are genuinely domain concepts, which is rare.
 
-### `src/lib/domain/value-objects/`
+### `src/domain/value-objects/`
 
 - Hold small immutable domain concepts with validation and equality semantics.
 - Prefer validated factory functions or constructors over raw object literals.
 - Keep them free from transport, framework, and persistence details.
 
-### `src/lib/domain/policies/`
+### `src/domain/policies/`
 
 - Hold business rules that span multiple models or require explicit decision
   logic.
@@ -120,13 +120,13 @@ unless they are genuinely domain concepts, which is rare.
 - Encode authorization intent here even though Rayfin enforces `@role`
   server-side; the policy documents and centralizes the app's expectation.
 
-### `src/lib/domain/services/`
+### `src/domain/services/`
 
 - Hold domain-level orchestration that is still infrastructure-free and not
   naturally owned by a single model or value object.
 - Use sparingly; prefer `policies/` when the code is fundamentally a rule.
 
-### `src/lib/domain/repositories/`
+### `src/domain/repositories/`
 
 - Define repository ports as interfaces or types.
 - Describe what the use case needs from persistence in domain terms.
@@ -135,7 +135,7 @@ unless they are genuinely domain concepts, which is rare.
 
 Do not turn repository ports into generic request/response contract storage.
 
-### `src/lib/domain/ports/`
+### `src/domain/ports/`
 
 - Define non-persistence outbound ports the app depends on: auth service,
   clock, id generator, notifier, feature flags.
@@ -143,7 +143,7 @@ Do not turn repository ports into generic request/response contract storage.
 
 ## Infrastructure Layer
 
-### `src/lib/infrastructure/rayfin/`
+### `src/infrastructure/rayfin/`
 
 - Own the `RayfinClient` singleton and its schema binding
   (`RayfinClient<TodoAppSchema>`).
@@ -153,7 +153,7 @@ Do not turn repository ports into generic request/response contract storage.
 
 This is one of the only places allowed to import `@microsoft/rayfin-client`.
 
-### `src/lib/infrastructure/data/`
+### `src/infrastructure/data/`
 
 - Hold repository implementations that satisfy `domain/repositories/` ports.
 - Use the typed `client.data.<Entity>` internally
@@ -167,14 +167,14 @@ This is one of the only places allowed to import `@microsoft/rayfin-client`.
 See [`rayfin-data-access.md`](rayfin-data-access.md) for the full data-access
 rules.
 
-### `src/lib/infrastructure/auth/`
+### `src/infrastructure/auth/`
 
 - Hold auth-service implementations that satisfy the `domain/ports/` auth port.
 - Provide at least the strategies the project needs, such as a mock/local-dev
   service and the Fabric-brokered service.
 - Accept the RayfinClient and config through the constructor.
 
-### `src/lib/infrastructure/browser/`
+### `src/infrastructure/browser/`
 
 - Hold browser-only integrations such as `localStorage`, `sessionStorage`,
   clipboard, media query, `BroadcastChannel`, or `IntersectionObserver`
@@ -182,7 +182,7 @@ rules.
 - Keep direct DOM and browser API calls here unless the logic is tiny and
   strictly component-local.
 
-### `src/lib/infrastructure/config/`
+### `src/infrastructure/config/`
 
 - Read environment configuration (`import.meta.env.VITE_*`) and expose it as a
   typed, validated object.
