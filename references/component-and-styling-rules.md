@@ -27,6 +27,11 @@ general-purpose component library.
   the two are used together. Each gets its own file. (A page or `App.tsx` may
   keep one tiny private guard/helper component, but its primary export still
   matches the file name.)
+- This is a non-negotiable basic. When you touch a legacy file that defines
+  several top-level components (e.g. a fat page with an inline form, table, and
+  card), split every one into its own file in the same change. A large or
+  untested file is a reason to plan the extraction carefully, never a reason to
+  leave it multi-component or defer it as "too risky".
 - Tiny presentational helpers that are clearly private to the component may
   stay in the same file only when all of the following hold:
   - it is not exported

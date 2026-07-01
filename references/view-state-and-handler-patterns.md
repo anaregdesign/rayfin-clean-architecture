@@ -12,6 +12,33 @@ Add a use-case module when at least one is true:
 
 For a single boolean toggle, keep state in the component.
 
+## Refactoring A Fat Screen (Non-Negotiable)
+
+When you touch an existing screen that mixes rendering with logic and inline
+components, split it fully in the same change. These are basics, not optional
+polish — a large or untested file is a reason to plan carefully, never a reason
+to defer:
+
+1. **Extract every inline top-level component into its own file** under
+   `src/components/<feature>/` (one component per file), or `shared/` when it is
+   feature-agnostic. Each becomes render-only: props, passed handlers, and
+   ephemeral UI state only.
+2. **Lift all view logic into the use case.** Put pure derivation (filtering,
+   sorting, grouping, "best default", view models) in `selectors.ts`;
+   interaction state and orchestration (create/update/status/merge/delete,
+   toasts, reloads, confirm flows) in a page view-model Hook
+   (`use-<feature>-page.ts`); form draft, validity, and derived previews in a
+   form Hook (`use-<feature>-form.ts`). Put record-shape mapping in
+   `domain/models`.
+3. **Reduce the page to a thin container:** call the view-model Hook and wire
+   its values and handlers into the extracted components. No filtering, no
+   orchestration, no domain calls, no second component in the file.
+
+A component may still hold genuinely ephemeral UI state (modal open, selected
+radio, active tab) and may call its own view-model Hook — the logic lives in the
+Hook, not in the component body. It must never hold business logic, data
+derivation, data access, or a second top-level component.
+
 ## Suggested Structure
 
 For a feature `todo`:

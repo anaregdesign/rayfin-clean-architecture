@@ -28,11 +28,14 @@ never be violated.**
    parameters, props, or a single React Context. No service locators, no
    module-level mutable singletons carrying request/user state, no `new
    SomeRepository()` inside `usecase` or `domain`.
-4. **One component per file; declarative routing; thin pages.** Each `.tsx`
-   exports exactly one React component whose name matches the file. Routing
-   uses `react-router-dom` in declarative mode (`<BrowserRouter>` /
-   `<Routes>` / `<Route>`) composed in `App.tsx`, with `src/pages/` holding
-   thin route containers that delegate to use cases.
+4. **One component per file; declarative routing; thin pages — completed in
+   one pass.** Each `.tsx` exports exactly one React component whose name
+   matches the file. Routing uses `react-router-dom` in declarative mode
+   (`<BrowserRouter>` / `<Routes>` / `<Route>`) composed in `App.tsx`, with
+   `src/pages/` holding thin route containers that delegate to use cases. These
+   are basics: when you touch a screen, split every inline component into its
+   own file and move all logic out in the SAME change. A large or untested file
+   is a reason to plan the split carefully, never a reason to defer it.
 5. **Never exceed a layer's responsibility, and defer platform concerns.**
    Components render, use cases orchestrate, domain holds business rules,
    infrastructure talks to Rayfin and the browser. Data-model decorators
@@ -336,6 +339,17 @@ reference that owns the full detail; load that reference for a matching change.
 - Let the use case own async calls (through repository ports), reducer logic,
   derived view state, event handlers, and error/pending mapping. Pass
   view-ready props into components.
+- **Never leave logic in the view.** Filtering, sorting, derivation, mapping,
+  orchestration (create/update/status/merge/delete), toasts, and reloads live
+  in the use case (a page view-model Hook plus `selectors.ts`); form draft,
+  validity, and derived previews live in a form Hook. Components and pages hold
+  only props, passed handlers, and ephemeral UI state (open/selected/active
+  tab).
+- **Treat "one component per file" and "extract shared/feature components" as
+  non-negotiable basics.** When you touch a fat screen, extract every inline
+  top-level component into its own file under `src/components/<feature>/` (or
+  `shared/` when feature-agnostic) in the same pass, and reduce the page to a
+  thin container. Plan the split for a large or untested file; do not defer it.
 
 ### 3. Route and navigate declaratively
 

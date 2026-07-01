@@ -111,6 +111,11 @@ Before considering the change complete, be able to state all of the following:
 
 - the use-case layer owns the interaction logic
 - the view layer is mostly props plus rendering, styled with Tailwind
+- every screen you touched is finished to the full architecture: one component
+  per file, inline components extracted, the page reduced to a thin container,
+  and no business logic, derivation, or data access left in a page or component
+- the fundamentals (one-component-per-file, shared/feature extraction,
+  no-logic-in-view) were completed in this pass, not deferred as "too risky"
 - feature-local presentational components live under `src/components/<feature>/`
 - `components/shared` stays presentational and feature-agnostic
 - reducer and state modules live with their owning feature use case

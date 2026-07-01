@@ -63,9 +63,11 @@ rewrite it all at once:
    auth is bootstrapped, build the dependency graph from the **same** client
    (`createDependencies(getRayfinClient())`) and wrap the tree in
    `DependenciesProvider`. Reuse the one client — do not initialize a second.
-2. Migrate a single feature: extract its repository port + Rayfin adapter, move
-   its orchestration into a `usecase` Hook, and rewire that feature's page onto
-   the Hook.
+2. Migrate a single feature **fully**: extract its repository port + Rayfin
+   adapter, move its orchestration into a `usecase` Hook, split every inline
+   component in its page into its own file under `src/components/<feature>/`,
+   lift all view logic into the use case (view-model Hook + `selectors.ts`), and
+   reduce the page to a thin container.
 3. Leave the legacy `services/*.ts` in place for features not yet migrated; keep
    them compiling by re-exporting any moved concepts (e.g. `accountName`,
    `AccountInput`) from their new `domain/` home.
@@ -74,6 +76,14 @@ rewrite it all at once:
    case and pass it into writes and the audit port.
 5. Repeat feature by feature; delete a legacy service only when its last
    consumer has migrated.
+
+**Staging is breadth, not depth.** "One feature at a time" chooses *which*
+feature to migrate — it never licenses a half-migrated feature. Every feature
+you touch is finished to the full architecture in that pass: one component per
+file, shared/feature components extracted, the page reduced to a thin container,
+and zero business logic left in the page or its components. These fundamentals
+are basics — plan the split when a screen is large or untested, but complete
+them in the same change; never defer them as "too risky".
 
 Keep the build green (`tsc -b`, tests, lint) after each feature.
 
