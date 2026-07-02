@@ -5,7 +5,9 @@ architecture of data access — where it lives and how it is shaped. It does
 **not** own the Rayfin data model itself: entity decorators (`@entity`,
 `@uuid`, `@text`, `@role`, …), RLS policy DSL, known limitations, and schema
 migration belong to the bundled `rayfin` skill and its MCP tools
-(`search_docs`, `get_doc`). Consult those before designing entities or queries.
+(`search_docs`, `get_doc`, `list_docs`, `discover_packages`; CLI fallback
+`npx -y @microsoft/rayfin-cli docs ...`). Consult those before designing
+entities or queries.
 
 ## The One Rule
 
@@ -112,7 +114,8 @@ live entity with identity.
 - In the adapter, set `user_id` from the current session (`claims.sub`) on
   create, and rely on the server policy for read/update/delete scoping.
 - Read the Fabric session through the client facade
-  (`this.client.getSession()`), not through a module global.
+  (`this.client.getSession()`, wrapping the SDK's `client.auth.getSession()`
+  which returns `{ isAuthenticated, user }`), not through a module global.
 - `user_id` sourced from `claims.sub` is a `@text()` field on the entity, not a
   FK — this is a platform detail; the adapter just supplies the value.
 

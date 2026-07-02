@@ -47,11 +47,22 @@ Map it onto the clean layers as you grow the app:
   `src/infrastructure/data/`
 - template `src/services/bootstrap.ts` → composition root in `src/main.tsx`
   plus factories in `src/infrastructure/config/`
-- template `src/hooks/AuthContext.tsx` → `src/usecase/auth/`
+- template `src/hooks/AuthContext.tsx` → `src/usecase/auth/`, split into
+  `AuthContext.tsx` (provider) + `use-auth.ts` (hook) — this also clears the
+  template's `react-refresh/only-export-components` lint warning
 - template `src/pages/`, `src/components/` → unchanged in spirit, kept thin
+- template `src/__tests__/` (with `setup.ts` wired in `vitest.config.ts`) →
+  keep; place new feature tests there or colocated with the module under test
 
-The platform files under `rayfin/` (`data/*.ts` entities, `rayfin.yml`) stay
-where they are and are owned by the `rayfin` skill, not this one.
+When extracting the auth port from the template's `IAuthService`, keep its full
+contract: `initEmbeddedAuth()` (the Fabric iframe embedded flow — returns
+`null` outside an iframe) and `fabricAuthEnabled` are load-bearing. The boot
+sequence tries `initEmbeddedAuth()` first, then `getCurrentUser()`; dropping
+either member breaks embedded Fabric sign-in or the AuthPage's loading label.
+
+The platform files under `rayfin/` (`data/*.ts` entities, `rayfin.yml`,
+`.env`, `.lockfile.json`) stay where they are and are owned by the `rayfin`
+skill, not this one.
 
 ### Staged Migration Of An Existing App
 

@@ -1,6 +1,8 @@
 # Project Bootstrap
 
-Use this guide when starting a new Rayfin app from scratch.
+Use this guide when starting a new Rayfin app from scratch. (Facts below were
+verified against `@microsoft/create-rayfin` 1.33.2, 2026-07; re-verify with
+`--list-templates` and the generated `package.json` if versions have moved.)
 
 ## Baseline Assumptions
 
@@ -25,17 +27,75 @@ Tailwind + Vite wiring, the `rayfin/` schema scaffold, `AGENTS.md`, and
 ```bash
 npm create @microsoft/rayfin@latest my-app
 cd my-app
-npm run dev   # deploys to Fabric as configured, then starts Vite
+npm run dev   # rayfin env → rayfin up (backend, static hosting excluded) → vite
 ```
 
-Pick the template that fits (Blank App, Data App, Todo variants). Do not
-retrofit a plain `create-vite` template — you would have to recreate the
+Pick the template that fits — `blankapp` (Blank App), `dataapp` (Data App),
+`todoapp` (Basic Todo App, full data path with per-user RLS), or
+`gettingstartedauth` (Todo with auth + getting-started docs). For an
+agent-driven, non-interactive bootstrap, pass flags instead of answering
+prompts:
+
+```bash
+npm create @microsoft/rayfin@latest -- --list-templates   # machine-readable JSON
+npm create @microsoft/rayfin@latest my-app -- \
+  --template todoapp --services auth,data --auth-methods fabric
+```
+
+Do not retrofit a plain `create-vite` template — you would have to recreate the
 decorator config, schema scaffold, and MCP wiring by hand.
 
+The generated scripts divide the work like this (verify in `package.json`):
+
+- `predev`/`prebuild`: `rayfin env --framework vite` — regenerates `.env.local`
+  (see below)
+- `dev`: `rayfin up --exclude-services staticHosting && vite` — deploys the
+  auth/data backend to Fabric, then serves the frontend locally
+- `rayfin:db`: `rayfin up db apply` — applies database schema migrations
+- `build:fabric`: the build the platform's static-hosting deploy invokes
+  (wired via `staticHosting.buildCommand` in `rayfin.yml`)
+
 Before writing entities or queries, consult the bundled `rayfin` skill / MCP
-`search_docs('known limitations')` for platform constraints. Entity decorators,
-`@role`/RLS, `rayfin.yml`, and deployment are **owned by the `rayfin` skill**,
-not this one.
+`search_docs('known limitations')` for platform constraints (MCP tools:
+`search_docs`, `get_doc`, `list_docs`, `discover_packages`; CLI fallback:
+`npx -y @microsoft/rayfin-cli docs ...` from the project root). Entity
+decorators, `@role`/RLS, `rayfin.yml`, and deployment are **owned by the
+`rayfin` skill**, not this one.
+
+## Environment Variables Are Generated
+
+`rayfin env` emits `.env.local` at the project root from `rayfin/.env`,
+exposing only `RAYFIN_PUBLIC_*` variables, renamed by dropping `PUBLIC_` and
+prefixing `VITE_`: `RAYFIN_PUBLIC_<NAME>` → `VITE_RAYFIN_<NAME>` (e.g.
+`RAYFIN_PUBLIC_API_URL` → `VITE_RAYFIN_API_URL`). The file carries an
+"Auto-generated … do not edit" header and is rewritten on every `npm run dev`
+and `npm run build` via `predev`/`prebuild`.
+
+- Never hand-edit `.env.local`; change `rayfin/.env` (platform-owned — defer to
+  the `rayfin` skill) and regenerate.
+- The template reads `VITE_RAYFIN_API_URL`, `VITE_RAYFIN_PUBLISHABLE_KEY`, and
+  for Fabric auth `VITE_FABRIC_WORKSPACE_ID`, `VITE_FABRIC_ITEM_ID`,
+  `VITE_FABRIC_PORTAL_URL`. Validate them as `unknown` in
+  `infrastructure/config/` like any other `import.meta.env` value.
+- The `VITE_FABRIC_*` values cannot be produced by the `rayfin env` mapping
+  (it always yields a `VITE_RAYFIN_` prefix); they are provisioned by the
+  platform tooling when a Fabric workspace is connected (workspace/item flags
+  at create time, `rayfin up`). When they are absent and the API URL points at
+  localhost, the template runs its mock/local path instead — do not hand-author
+  them.
+
+## Platform-Managed Scaffolding — Never Hand-Edit
+
+The CLI owns and re-syncs these files (the create flow's "Synchronizing with
+latest rayfin scaffolding" step; hashes tracked in `rayfin/.lockfile.json`):
+
+- `.agents/skills/rayfin/` — the bundled `rayfin` skill (`rayfin-managed: true`
+  in its frontmatter)
+- the `rayfin` server entry in `.mcp.json`
+- `rayfin/.lockfile.json` itself
+
+Hand edits are overwritten on the next sync and break the hash tracking. Put
+project-specific agent guidance in `AGENTS.md` or your own skills instead.
 
 ## Grow The Layers As Needed
 
@@ -56,6 +116,22 @@ src/
 Map the template's starter files onto the layers as described in
 [`layout-and-module-placement.md`](layout-and-module-placement.md): `services/`
 → `infrastructure/`, `hooks/` → `usecase/`.
+
+**The template's starter code is a migration starting point, not the target
+architecture.** As shipped it violates this skill's patterns on purpose (it
+optimizes for a small working sample): `services/rayfinClient.ts` is a
+module-level mutable singleton reached through a `getRayfinClient()` service
+locator, `services/todos.ts` branches on `isLocalBackend()` inside every
+function instead of a Strategy chosen in a factory, and `pages/HomePage.tsx`
+owns fetching, handlers, and derivation inline. When the first real feature
+lands, migrate that feature fully per the staged-migration guide in
+[`layout-and-module-placement.md`](layout-and-module-placement.md) rather than
+copying these starter patterns into new code.
+
+Known template lint warning: `src/hooks/AuthContext.tsx` trips
+`react-refresh/only-export-components` because it exports both the provider and
+the `useAuth` hook. The canonical split (`usecase/auth/AuthContext.tsx` +
+`use-auth.ts`) clears it; do not suppress the rule instead.
 
 ## Wire The Composition Root First
 

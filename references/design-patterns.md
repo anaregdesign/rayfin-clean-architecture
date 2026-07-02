@@ -121,11 +121,21 @@ SDK sits behind them.
 ```ts
 // src/domain/ports/auth-service.ts  (port)
 export interface AuthService {
+  /** True when interactive Fabric/Entra sign-in is required (drives UI labels). */
+  readonly fabricAuthEnabled: boolean;
   getCurrentUser(): Promise<AuthUser | null>;
+  /** Must be called from a user gesture — Fabric opens a broker popup. */
   signIn(): Promise<AuthUser>;
   signOut(): Promise<void>;
+  /** Fabric iframe embedded flow; resolves null outside an iframe. */
+  initEmbeddedAuth(): Promise<AuthUser | null>;
 }
 ```
+
+This matches the template's `IAuthService` contract. When migrating it into a
+port, keep all four members: boot tries `initEmbeddedAuth()` first and falls
+back to `getCurrentUser()`, so dropping the embedded flow silently breaks
+sign-in when the app runs inside a Fabric iframe.
 
 ```ts
 // src/infrastructure/auth/rayfin-auth-service.ts  (adapter)
